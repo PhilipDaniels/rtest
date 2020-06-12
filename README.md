@@ -39,8 +39,9 @@ A testing GUI for Rust.
   - [ ] A generic TabStrip widget
   - [ ] A green/red percentage bar chart widget
 
-- [ ] Assets
+- [ ] Assets and Theming
   - [ ] Icons for the toolbar. We want these to be SVG so they can be scaled to any size.
+  - [ ] Light and dark default themes
 
 - [ ] Shadow copy feature
   - [ ] Config: specify a temp dir or a known dir (~/.rtest/...)

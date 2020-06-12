@@ -1,16 +1,23 @@
+use std::io::Write;
+
 use chrono::{DateTime, Utc};
+use druid::widget::Label;
+use druid::{AppLauncher, LocalizedString, PlatformError, Widget, WindowDesc};
 use env_logger::Builder;
 use log::info;
-use std::io::Write;
+
+pub const PROGRAM_NAME: &str = env!("CARGO_PKG_NAME");
 
 fn main() {
     configure_logging();
-    info!("Starting rtest");
-
-    info!("Stopping rtest");
+    info!("Starting {}", PROGRAM_NAME);
+    create_main_window();
+    info!("Stopping {}", PROGRAM_NAME);
 }
 
-// Just configures logging in such a way that we can see everything.
+/// Just configures logging in such a way that we can see everything.
+/// We are using [env_logger](https://crates.io/crates/env_logger)
+/// so everything is configured via environment variables.
 fn configure_logging() {
     let mut builder = Builder::from_default_env();
     builder.format(|buf, record| {
@@ -36,4 +43,26 @@ fn configure_logging() {
     });
 
     builder.init();
+}
+
+fn build_main_window() -> impl Widget<()> {
+    Label::new("Hello world")
+}
+
+fn create_main_window() {
+    let title_placeholder = format!("{} - TDD for Rust", PROGRAM_NAME);
+
+    let main_window_desc = WindowDesc::new(build_main_window)
+        .window_size((512.0, 512.0))
+        .resizable(true)
+        .title(
+            LocalizedString::new("rtest-main-window-title")
+                .with_placeholder(&title_placeholder),
+        );
+
+    let state = ();
+
+    AppLauncher::with_window(main_window_desc)
+        .launch(state)
+        .expect("Cannot create main window");
 }
