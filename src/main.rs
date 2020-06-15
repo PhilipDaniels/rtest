@@ -2,9 +2,12 @@ use std::io::Write;
 
 use chrono::{DateTime, Utc};
 use druid::widget::Label;
-use druid::{AppLauncher, LocalizedString, PlatformError, Widget, WindowDesc};
 use env_logger::Builder;
 use log::info;
+use druid::piet::Color;
+use druid::widget::{Align, Container, Padding, Split, Flex, CrossAxisAlignment, SizedBox};
+use druid::{AppLauncher, LocalizedString, Widget, WidgetExt, WindowDesc};
+
 
 pub const PROGRAM_NAME: &str = env!("CARGO_PKG_NAME");
 
@@ -46,7 +49,22 @@ fn configure_logging() {
 }
 
 fn build_main_window() -> impl Widget<()> {
-    Label::new("Hello world")
+    let label = Label::new("Hello world")
+        .center()
+        .border(Color::WHITE, 1.0)
+        .padding(4.0);  // Padding occurs outside the border.
+
+    let label2 = Label::new("Hello world 2222")
+        .center()
+        .border(Color::WHITE, 1.0)
+        .padding(4.0);  // Padding occurs outside the border.
+
+    Flex::column()
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        //.must_fill_main_axis(true)
+        .with_child(SizedBox::new(label).height(60.0))
+        .with_flex_child(label2, 1.0)
+
 }
 
 fn create_main_window() {
