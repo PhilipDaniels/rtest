@@ -1,21 +1,38 @@
 use log::info;
 use druid::piet::Color;
-use druid::widget::{Label, Button, Split, Flex, CrossAxisAlignment, SizedBox};
+use druid::widget::{Label, Button, Split, Flex, CrossAxisAlignment, MainAxisAlignment,
+    SizedBox};
 use druid::{Widget, WidgetExt};
 
 type STATE = ();
+const TABSTRIP_HEIGHT: f64 = 50.0;
 
-/// Construct the tabstrip at the top of the main window
-fn build_tabstrip() -> impl Widget<STATE> {
-    let tabstrip = Button::new("THE TABSTRIP GOES HERE")
+fn build_tabstrip_button(text: &str) -> impl Widget<STATE> {
+    let msg = format!("Clicked {}", text);
+
+    let button = Button::new(text)
         .on_click(move |_event, _data: &mut STATE, _env| {
-            info!("Clicked TESTS");
+            info!("{}", msg);
         })
         .center()
         .border(Color::WHITE, 1.0)
         .padding(4.0);
 
-    SizedBox::new(tabstrip).height(50.0)
+    SizedBox::new(button)
+        .height(TABSTRIP_HEIGHT)
+        .width(100.0)
+}
+
+/// Construct the tabstrip at the top of the main window
+fn build_tabstrip() -> impl Widget<STATE> {
+    let tabstrip = Flex::row()
+        .with_flex_child(build_tabstrip_button("Tests"), 1.0)
+        .with_flex_child(build_tabstrip_button("Coverage"), 1.0)
+        .with_flex_child(build_tabstrip_button("Stats"), 1.0)
+        .with_flex_child(build_tabstrip_button("Queue"), 1.0)
+        .with_flex_child(build_tabstrip_button("Settings"), 1.0);
+
+    SizedBox::new(tabstrip).height(TABSTRIP_HEIGHT)
 }
 
 /// Construct the 'test panel'. This is the entire set of controls that
