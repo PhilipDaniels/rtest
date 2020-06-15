@@ -1,13 +1,11 @@
-use std::io::Write;
-
 use chrono::{DateTime, Utc};
+use druid::{AppLauncher, LocalizedString, WindowDesc};
 use env_logger::Builder;
 use log::info;
+use std::io::Write;
 
-use druid::piet::Color;
-use druid::widget::{Label, Button, Align, Container, Padding, Split, Flex, CrossAxisAlignment, SizedBox};
-use druid::{AppLauncher, LocalizedString, Widget, WidgetExt, WindowDesc};
-
+mod ui;
+use ui::build_main_window;
 
 pub const PROGRAM_NAME: &str = env!("CARGO_PKG_NAME");
 
@@ -48,60 +46,14 @@ fn configure_logging() {
     builder.init();
 }
 
-fn build_main_window() -> impl Widget<()> {
-    // Padding occurs outside the border.
-
-    // ---- Construct the tabstrip at the top of the screen ----
-    let tabstrip = Button::new("THE TABSTRIP GOES HERE")
-        .center()
-        .border(Color::WHITE, 1.0)
-        .padding(4.0);
-    let tabstrip = SizedBox::new(tabstrip).height(50.0);
-
-    // ---- To start with, there is only 1 'panel' for us to select. ----
-    // ---- The one corresponding to when the 'Tests' tab is selected. ----
-    // A toolbar which will contain the controls for the 'Tests', e.g. 'Run Tests' button.
-    let test_toolbar = Button::new("TEST TOOLBAR")
-        .border(Color::WHITE, 1.0)
-        .expand_width()
-        .padding(4.0);
-    let test_toolbar = SizedBox::new(test_toolbar).height(50.0);
-
-    // This splitter contains the treeview on the LHS and the results on the RHS.
-    let test_tree_splitter = Split::columns(
-        Label::new("TEST TREE"),
-        Label::new("TEST RESULTS"))
-        .split_point(0.35)
-        .draggable(true)
-        .min_size(120.0)
-        .border(Color::WHITE, 1.0)
-        .expand()
-        .padding(4.0);
-
-    // This constructs the actual panel containing those two controls.
-    let test_tree_panel = Flex::column()
-        .with_child(test_toolbar)
-        .with_flex_child(test_tree_splitter, 1.0)
-        .background(Color::rgb8(128,128,128))
-        .expand();
-
-    // Finally put them all together.
-    Flex::column()
-        .cross_axis_alignment(CrossAxisAlignment::Center)
-        .with_child(tabstrip)
-        .with_flex_child(test_tree_panel, 1.0)
-}
-
 fn create_main_window() {
-    let title_placeholder = format!("{} - TDD for Rust", PROGRAM_NAME);
+    let title_string = LocalizedString::new("rtest-main-window-title")
+        .with_placeholder(format!("{} - TDD for Rust", PROGRAM_NAME));
 
     let main_window_desc = WindowDesc::new(build_main_window)
         .window_size((512.0, 512.0))
         .resizable(true)
-        .title(
-            LocalizedString::new("rtest-main-window-title")
-                .with_placeholder(&title_placeholder),
-        );
+        .title(title_string);
 
     let state = ();
 
