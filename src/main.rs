@@ -1,11 +1,11 @@
 use std::io::Write;
 
 use chrono::{DateTime, Utc};
-use druid::widget::Label;
 use env_logger::Builder;
 use log::info;
+
 use druid::piet::Color;
-use druid::widget::{Align, Container, Padding, Split, Flex, CrossAxisAlignment, SizedBox};
+use druid::widget::{Label, Button, Align, Container, Padding, Split, Flex, CrossAxisAlignment, SizedBox};
 use druid::{AppLauncher, LocalizedString, Widget, WidgetExt, WindowDesc};
 
 
@@ -49,22 +49,47 @@ fn configure_logging() {
 }
 
 fn build_main_window() -> impl Widget<()> {
-    let label = Label::new("Hello world")
+    // Padding occurs outside the border.
+
+    // ---- Construct the tabstrip at the top of the screen ----
+    let tabstrip = Button::new("THE TABSTRIP GOES HERE")
         .center()
         .border(Color::WHITE, 1.0)
-        .padding(4.0);  // Padding occurs outside the border.
+        .padding(4.0);
+    let tabstrip = SizedBox::new(tabstrip).height(50.0);
 
-    let label2 = Label::new("Hello world 2222")
-        .center()
+    // ---- To start with, there is only 1 'panel' for us to select. ----
+    // ---- The one corresponding to when the 'Tests' tab is selected. ----
+    // A toolbar which will contain the controls for the 'Tests', e.g. 'Run Tests' button.
+    let test_toolbar = Button::new("TEST TOOLBAR")
         .border(Color::WHITE, 1.0)
-        .padding(4.0);  // Padding occurs outside the border.
+        .expand_width()
+        .padding(4.0);
+    let test_toolbar = SizedBox::new(test_toolbar).height(50.0);
 
+    // This splitter contains the treeview on the LHS and the results on the RHS.
+    let test_tree_splitter = Split::columns(
+        Label::new("TEST TREE"),
+        Label::new("TEST RESULTS"))
+        .split_point(0.35)
+        .draggable(true)
+        .min_size(120.0)
+        .border(Color::WHITE, 1.0)
+        .expand()
+        .padding(4.0);
+
+    // This constructs the actual panel containing those two controls.
+    let test_tree_panel = Flex::column()
+        .with_child(test_toolbar)
+        .with_flex_child(test_tree_splitter, 1.0)
+        .background(Color::rgb8(128,128,128))
+        .expand();
+
+    // Finally put them all together.
     Flex::column()
         .cross_axis_alignment(CrossAxisAlignment::Center)
-        //.must_fill_main_axis(true)
-        .with_child(SizedBox::new(label).height(60.0))
-        .with_flex_child(label2, 1.0)
-
+        .with_child(tabstrip)
+        .with_flex_child(test_tree_panel, 1.0)
 }
 
 fn create_main_window() {
