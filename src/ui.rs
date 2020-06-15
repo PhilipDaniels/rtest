@@ -1,10 +1,16 @@
+use log::info;
 use druid::piet::Color;
 use druid::widget::{Label, Button, Split, Flex, CrossAxisAlignment, SizedBox};
 use druid::{Widget, WidgetExt};
 
+type STATE = ();
+
 /// Construct the tabstrip at the top of the main window
-fn build_tabstrip() -> impl Widget<()> {
+fn build_tabstrip() -> impl Widget<STATE> {
     let tabstrip = Button::new("THE TABSTRIP GOES HERE")
+        .on_click(move |_event, _data: &mut STATE, _env| {
+            info!("Clicked TESTS");
+        })
         .center()
         .border(Color::WHITE, 1.0)
         .padding(4.0);
@@ -14,7 +20,7 @@ fn build_tabstrip() -> impl Widget<()> {
 
 /// Construct the 'test panel'. This is the entire set of controls that
 /// is displayed when the TESTS tab is selected.
-fn build_test_panel() -> impl Widget<()> {
+fn build_test_panel() -> impl Widget<STATE> {
     // This is the toolbar at the top of the panel.
     let test_toolbar = Button::new("TEST TOOLBAR")
         .border(Color::WHITE, 1.0)
@@ -42,7 +48,7 @@ fn build_test_panel() -> impl Widget<()> {
 }
 
 /// Constructs the main window of the application.
-pub fn build_main_window() -> impl Widget<()> {
+pub fn build_main_window() -> impl Widget<STATE> {
     Flex::column()
         .cross_axis_alignment(CrossAxisAlignment::Center)
         .with_child(build_tabstrip())
