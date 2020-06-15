@@ -7,9 +7,10 @@ A testing GUI for Rust.
 
 # Things to create
 
-- [ ] The main rtest window
-  - [ ] Ability to flip between views using a tab at the top of the page
-  - [ ] Save and restore position on a per-project basis
+* The main rtest window
+** DONE Ability to flip between views using a tab at the top of the page
+** DONE Save and restore position on a per-project basis
+
 
 - [ ] The main window 'Tests' tab
   - [ ] Tab strip along the top to allow selection of main functions. Fixed size.
