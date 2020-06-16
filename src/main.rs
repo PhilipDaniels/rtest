@@ -4,16 +4,25 @@ use env_logger::Builder;
 use log::info;
 use std::io::Write;
 
+mod configuration;
 mod ui;
+
 use ui::build_main_window;
 
-pub const PROGRAM_NAME: &str = env!("CARGO_PKG_NAME");
+pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
+pub const CARGO_PKG_AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
+pub const CARGO_PKG_DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");
+pub const CARGO_PKG_REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
+pub const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 
 fn main() {
     configure_logging();
-    info!("Starting {}", PROGRAM_NAME);
+    info!("Starting {}", CARGO_PKG_NAME);
+    let config = configuration::new();
+    info!("{:?}", config);
     create_main_window();
-    info!("Stopping {}", PROGRAM_NAME);
+    info!("Stopping {}", CARGO_PKG_NAME);
 }
 
 /// Just configures logging in such a way that we can see everything.
@@ -48,7 +57,7 @@ fn configure_logging() {
 
 fn create_main_window() {
     let title_string = LocalizedString::new("rtest-main-window-title")
-        .with_placeholder(format!("{} - TDD for Rust", PROGRAM_NAME));
+        .with_placeholder(format!("{} - TDD for Rust", CARGO_PKG_NAME));
 
     let main_window_desc = WindowDesc::new(build_main_window)
         .window_size((512.0, 512.0))
