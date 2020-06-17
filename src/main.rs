@@ -6,10 +6,12 @@ use std::{io::Write, path::PathBuf};
 
 mod configuration;
 mod engine;
+mod job;
+mod new_job;
 mod ui;
 
 use configuration::Destination;
-use engine::{Job, JobEngine, new_jobs};
+use engine::JobEngine;
 use ui::build_main_window;
 
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
@@ -30,11 +32,11 @@ fn main() {
     match config.destination_directory {
         Destination::SourceDirectory(_) => {}
         Destination::NamedDirectory(pathbuf) => {
-            let job = new_jobs::shadow_copy(config.source_directory.clone(), pathbuf.clone());
+            let job = new_job::shadow_copy(config.source_directory.clone(), pathbuf.clone());
             engine.add_job(job);
         }
         Destination::TempDirectory(tempdir) => {
-            let job = new_jobs::shadow_copy(config.source_directory.clone(), tempdir.path().into());
+            let job = new_job::shadow_copy(config.source_directory.clone(), tempdir.path().into());
             engine.add_job(job);
         }
     }
