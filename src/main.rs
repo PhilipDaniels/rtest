@@ -25,9 +25,6 @@ fn main() {
 
     let mut engine = JobEngine::new();
     engine.add_job(Job::ShadowCopy);
-    engine.add_job(Job::ShadowCopy);
-    std::thread::sleep_ms(5000);
-    engine.add_job(Job::ShadowCopy);
 
     create_main_window();
     info!("Stopping {}", CARGO_PKG_NAME);

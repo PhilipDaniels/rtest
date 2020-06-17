@@ -6,27 +6,10 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-pub enum Job {
-    ShadowCopy,
-}
-
 pub struct JobQueue {
     jobs: Mutex<VecDeque<Job>>,
     cvar: Condvar,
 }
-
-// impl Deref for JobQueue {
-//     type Target = Mutex<VecDeque<Job>>;
-//     fn deref(&self) -> &Self::Target {
-//         &self.jobs
-//     }
-// }
-
-// impl DerefMut for JobQueue {
-//     fn deref_mut(&mut self) -> &mut Self::Target {
-//         &mut self.jobs
-//     }
-// }
 
 impl JobQueue {
     pub fn new() -> Self {
@@ -56,10 +39,10 @@ impl JobQueue {
         self.cvar.notify_all();
     }
 
-    pub fn pop_front(&self, job: Job) -> Option<Job> {
-        let mut lock = self.jobs.lock().unwrap();
-        lock.pop_front()
-    }
+    // pub fn pop_front(&self, job: Job) -> Option<Job> {
+    //     let mut lock = self.jobs.lock().unwrap();
+    //     lock.pop_front()
+    // }
 
     fn get_next_job(&self) -> Job {
         let mut jobs = self.jobs.lock().unwrap();
@@ -104,4 +87,16 @@ impl JobEngine {
     pub fn add_job(&mut self, job: Job) {
         self.queue.push_back(job);
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.queue.len()
+    }
+}
+
+pub enum Job {
+    ShadowCopy,
 }
