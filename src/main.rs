@@ -2,13 +2,14 @@ use chrono::{DateTime, Utc};
 use druid::{AppLauncher, LocalizedString, WindowDesc};
 use env_logger::Builder;
 use log::info;
-use std::io::Write;
+use std::{io::Write, path::PathBuf};
 
 mod configuration;
 mod engine;
 mod ui;
 
-use engine::{Job, JobEngine};
+use configuration::Destination;
+use engine::{Job, JobEngine, new_jobs};
 use ui::build_main_window;
 
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
@@ -24,7 +25,19 @@ fn main() {
     info!("{:?}", config);
 
     let mut engine = JobEngine::new();
-    engine.add_job(Job::ShadowCopy);
+
+    // If a shadow copy operation is required, kick one off.
+    match config.destination_directory {
+        Destination::SourceDirectory(_) => {}
+        Destination::NamedDirectory(pathbuf) => {
+            let job = new_jobs::shadow_copy(config.source_directory.clone(), pathbuf.clone());
+            engine.add_job(job);
+        }
+        Destination::TempDirectory(tempdir) => {
+            let job = new_jobs::shadow_copy(config.source_directory.clone(), tempdir.path().into());
+            engine.add_job(job);
+        }
+    }
 
     create_main_window();
     info!("Stopping {}", CARGO_PKG_NAME);

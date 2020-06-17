@@ -18,8 +18,8 @@ pub enum Destination {
 #[derive(Debug)]
 pub struct Configuration {
     /// The directory that contains the sources we will be testing.
-    source_directory: PathBuf,
-    destination_directory: Destination,
+    pub source_directory: PathBuf,
+    pub destination_directory: Destination,
 }
 
 pub fn new() -> Configuration {
