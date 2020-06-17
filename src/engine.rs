@@ -58,6 +58,7 @@ impl JobQueue {
 
 pub struct JobEngine {
     pending_jobs: Arc<JobQueue>,
+    completed_jobs: Arc<Mutex<Vec<Job>>>,
     job_processor: JoinHandle<()>,
 }
 
@@ -65,17 +66,23 @@ pub struct JobEngine {
 impl JobEngine {
     pub fn new() -> Self {
         let pending_jobs = Arc::new(JobQueue::new());
+        let completed_jobs = Arc::new(Mutex::new(Vec::new()));
 
         let job_processor = thread::spawn({
             let pending_jobs = pending_jobs.clone();
+            let completed_jobs = completed_jobs.clone();
+
             move || loop {
                 let mut job = pending_jobs.get_next_job();
                 job.execute();
+                let mut cj = completed_jobs.lock().unwrap();
+                cj.push(job);
             }
         });
 
         Self {
             pending_jobs,
+            completed_jobs,
             job_processor,
         }
     }
@@ -90,5 +97,9 @@ impl JobEngine {
 
     pub fn len(&self) -> usize {
         self.pending_jobs.len()
+    }
+
+    pub fn completed_len(&self) -> usize {
+        self.completed_jobs.lock().unwrap().len()
     }
 }
