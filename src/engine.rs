@@ -1,14 +1,32 @@
 use log::info;
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
-use std::thread::{self, JoinHandle};
+use std::{
+    ops::{Deref, DerefMut},
+    thread::{self, JoinHandle},
+};
 
-pub enum Job {}
+pub enum Job {
+    ShadowCopy,
+}
 
 pub struct JobQueue {
     jobs: Mutex<VecDeque<Job>>,
     cvar: Condvar,
 }
+
+// impl Deref for JobQueue {
+//     type Target = Mutex<VecDeque<Job>>;
+//     fn deref(&self) -> &Self::Target {
+//         &self.jobs
+//     }
+// }
+
+// impl DerefMut for JobQueue {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.jobs
+//     }
+// }
 
 impl JobQueue {
     pub fn new() -> Self {
@@ -32,13 +50,13 @@ impl JobQueue {
         lock.len()
     }
 
-    pub fn push_back(&mut self, job: Job) {
+    pub fn push_back(&self, job: Job) {
         let mut lock = self.jobs.lock().unwrap();
         lock.push_back(job);
         self.cvar.notify_all();
     }
 
-    pub fn pop_front(&mut self, job: Job) -> Option<Job> {
+    pub fn pop_front(&self, job: Job) -> Option<Job> {
         let mut lock = self.jobs.lock().unwrap();
         lock.pop_front()
     }
@@ -48,7 +66,10 @@ impl JobQueue {
         loop {
             match jobs.pop_front() {
                 Some(job) => return job,
-                None => jobs = self.cvar.wait(jobs).unwrap(),
+                None => {
+                    info!("All jobs processed, sleeping");
+                    jobs = self.cvar.wait(jobs).unwrap();
+                }
             }
         }
     }
@@ -69,6 +90,8 @@ impl JobEngine {
             move || loop {
                 let job = queue.get_next_job();
                 info!("TODO: Processing job");
+                // When the job is complete we need to send a message
+                // so that the UI can be updated.
             }
         });
 

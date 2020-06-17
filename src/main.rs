@@ -8,7 +8,7 @@ mod configuration;
 mod engine;
 mod ui;
 
-use engine::JobEngine;
+use engine::{Job, JobEngine};
 use ui::build_main_window;
 
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
@@ -24,6 +24,10 @@ fn main() {
     info!("{:?}", config);
 
     let mut engine = JobEngine::new();
+    engine.add_job(Job::ShadowCopy);
+    engine.add_job(Job::ShadowCopy);
+    std::thread::sleep_ms(5000);
+    engine.add_job(Job::ShadowCopy);
 
     create_main_window();
     info!("Stopping {}", CARGO_PKG_NAME);
