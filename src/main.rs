@@ -29,7 +29,9 @@ fn main() {
     let mut engine = JobEngine::new();
 
     // If a shadow copy operation is required, kick one off.
-    match config.destination_directory {
+    // This & is important to ensure the temp dir gets dropped when we exit,
+    // otherwise it gets moved and dropped before we do the shadow-copy!
+    match &config.destination_directory {
         Destination::SourceDirectory(_) => {}
         Destination::NamedDirectory(pathbuf) => {
             let job = new_job::shadow_copy(config.source_directory.clone(), pathbuf.clone());
