@@ -1,4 +1,4 @@
-use crate::job::Job;
+use crate::jobs::Job;
 use log::info;
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
@@ -103,3 +103,19 @@ impl JobEngine {
         self.completed_jobs.lock().unwrap().len()
     }
 }
+
+
+/*
+We need the following
+
+* While a job is executing, the GUI needs to update to show the latest status.
+* When a job is completed, we will still want to display details in the GUI.
+  For example, a list of completed tests. So the GUI is based on Vec<Tests>,
+  and each test is linked to a particular job. One job may be linked to
+  several tests.
+* A job needs an ID.
+* We need to support cancellation of jobs.
+* When a job finishes execution it may create N more jobs.
+
+
+*/
