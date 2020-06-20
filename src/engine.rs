@@ -104,7 +104,6 @@ impl JobEngine {
     }
 }
 
-
 /*
 We need the following
 
@@ -124,4 +123,9 @@ Perform shadow copy
     All we care about are file-delete/update/create events
     We need to process them through .gitignore though
 
+
+Some more concepts we have
+    - Convert source file path to dest file path
+    - Create needed directories in destination
+    - Where the .gitignore files are and how to use them
 */

@@ -6,7 +6,6 @@ use logging_timer::stime;
 use shadow_copy::ShadowCopyJob;
 use std::{
     fmt::Display,
-    path::{Path, PathBuf},
     sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -80,6 +79,7 @@ impl JobStatus {
     }
 }
 
+/// The `JobKind` specifies what type of job it is and the supporting data needed for that job.
 #[derive(Debug)]
 pub enum JobKind {
     /// Perform a shadow copy from the first directory (the source) to
@@ -120,7 +120,7 @@ impl JobId {
         static ID: AtomicUsize = AtomicUsize::new(1);
 
         Self {
-            id: ID.fetch_add(1, Ordering::SeqCst)
+            id: ID.fetch_add(1, Ordering::SeqCst),
         }
     }
 }

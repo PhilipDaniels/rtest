@@ -1,10 +1,7 @@
 use crate::jobs::{Job, JobKind};
 use ignore::WalkBuilder;
 use log::info;
-use std::{
-    fmt::Display,
-    path::{Path, PathBuf},
-};
+use std::{fmt::Display, path::PathBuf};
 
 #[derive(Debug)]
 pub struct ShadowCopyJob {

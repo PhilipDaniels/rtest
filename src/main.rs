@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use druid::{AppLauncher, LocalizedString, WindowDesc};
 use env_logger::Builder;
 use log::info;
-use std::{io::Write, path::PathBuf};
+use std::io::Write;
 
 mod configuration;
 mod engine;
@@ -11,8 +11,8 @@ mod ui;
 
 use configuration::Destination;
 use engine::JobEngine;
-use ui::build_main_window;
 use jobs::shadow_copy::ShadowCopyJob;
+use ui::build_main_window;
 
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CARGO_PKG_AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
