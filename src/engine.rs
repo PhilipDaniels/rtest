@@ -113,9 +113,15 @@ We need the following
   For example, a list of completed tests. So the GUI is based on Vec<Tests>,
   and each test is linked to a particular job. One job may be linked to
   several tests.
-* A job needs an ID.
 * We need to support cancellation of jobs.
 * When a job finishes execution it may create N more jobs.
 
+
+Immediately create a watcher on the directory
+Create shadow copy job and run it
+Perform shadow copy
+    Watcher events become new jobs that will execute after the shadow copy has finished
+    All we care about are file-delete/update/create events
+    We need to process them through .gitignore though
 
 */

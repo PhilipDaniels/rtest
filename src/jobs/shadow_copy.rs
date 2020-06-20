@@ -49,8 +49,6 @@ impl ShadowCopyJob {
     }
 
     pub fn execute(&mut self) {
-        let mut num_files = 0;
-
         let walker = WalkBuilder::new(&self.source).build();
         for result in walker {
             match result {
@@ -73,13 +71,12 @@ impl ShadowCopyJob {
                     std::fs::create_dir_all(dest_sub_dir).unwrap();
                     std::fs::copy(entry.path(), dest_path).unwrap();
 
-                    num_files += 1;
+                    self.num_files_copied += 1;
                 }
                 Err(err) => println!("ERROR: {}", err),
             }
         }
 
-        self.num_files_copied = num_files;
         info!("{} files copied", self.num_files_copied);
     }
 }
