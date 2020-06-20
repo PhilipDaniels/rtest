@@ -7,6 +7,7 @@ use shadow_copy::ShadowCopyJob;
 use std::{
     fmt::Display,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicUsize, Ordering},
 };
 
 #[derive(Debug, Clone)]
@@ -79,6 +80,7 @@ impl JobStatus {
     }
 }
 
+#[derive(Debug)]
 pub enum JobKind {
     /// Perform a shadow copy from the first directory (the source) to
     /// the second directory (the destination)
@@ -101,19 +103,29 @@ impl JobKind {
     }
 }
 
+/// Every Job has a unique id.
 #[derive(Debug)]
 pub struct JobId {
     id: usize,
 }
 
+impl Display for JobId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Job #{}", self.id)
+    }
+}
+
 impl JobId {
     fn new() -> Self {
+        static ID: AtomicUsize = AtomicUsize::new(1);
+
         Self {
-            id: 0
+            id: ID.fetch_add(1, Ordering::SeqCst)
         }
     }
 }
 
+#[derive(Debug)]
 pub struct Job {
     id: JobId,
     status: JobStatus,
@@ -138,7 +150,7 @@ impl Job {
 
     #[stime]
     pub fn execute(&mut self) {
-        info!("Executing job: {}", self);
+        info!("Executing: {}", self);
         self.status.begin_execution();
         self.kind.execute();
         self.status.complete_execution(CompletionStatus::Ok);
@@ -147,6 +159,6 @@ impl Job {
 
 impl Display for Job {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.kind.fmt(f)
+        write!(f, "{} {}", self.id, self.kind)
     }
 }

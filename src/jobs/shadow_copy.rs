@@ -6,6 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[derive(Debug)]
 pub struct ShadowCopyJob {
     source: PathBuf,
     destination: PathBuf,
