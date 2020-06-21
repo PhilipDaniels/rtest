@@ -32,6 +32,7 @@ impl JobQueue {
     }
 
     pub fn push_back(&self, job: Job) {
+        assert!(job.is_pending());
         let mut lock = self.jobs.lock().unwrap();
         lock.push_back(job);
         self.cvar.notify_all();

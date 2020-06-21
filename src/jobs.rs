@@ -148,6 +148,14 @@ impl Job {
         &self.id
     }
 
+    /// Returns true if this is a pending job.
+    pub fn is_pending(&self) -> bool {
+        match self.status {
+            JobStatus::Pending(_) => true,
+            _ => false
+        }
+    }
+
     #[stime]
     pub fn execute(&mut self) {
         info!("Executing: {}", self);
