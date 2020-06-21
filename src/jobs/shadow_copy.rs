@@ -1,5 +1,5 @@
 use crate::{
-    destination::DestinationDirectory,
+    shadow_copy_destination::ShadowCopyDestination,
     jobs::{Job, JobKind},
 };
 use ignore::WalkBuilder;
@@ -8,7 +8,7 @@ use std::fmt::Display;
 
 #[derive(Debug)]
 pub struct ShadowCopyJob {
-    destination: DestinationDirectory,
+    destination: ShadowCopyDestination,
     num_files_copied: usize,
 }
 
@@ -24,17 +24,9 @@ impl Display for ShadowCopyJob {
 }
 
 impl ShadowCopyJob {
-    // pub fn source(&self) -> &Path {
-    //     &self.source
-    // }
-
-    // pub fn destination(&self) -> &Path {
-    //     &self.destination
-    // }
-
     /// Create a new shadow copy job to copy from the `source` directory
     /// to the `destination` directory.
-    pub fn new(destination_directory: DestinationDirectory) -> Job {
+    pub fn new(destination_directory: ShadowCopyDestination) -> Job {
         assert!(
             destination_directory.is_copying(),
             "A ShadowCopyJob should not be constructed if we are not actually copying elsewhere"

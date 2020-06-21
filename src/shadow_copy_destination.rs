@@ -5,12 +5,12 @@ use std::path::{Path, PathBuf};
 /// The temporary directory where we make the shadow copy and do the
 /// compilations and test runs.
 #[derive(Debug, Clone)]
-pub struct DestinationDirectory {
+pub struct ShadowCopyDestination {
     source_directory: PathBuf,
     destination_directory: Option<PathBuf>,
 }
 
-impl DestinationDirectory {
+impl ShadowCopyDestination {
     pub fn new<P>(source_directory: P, destination_type: &DestinationType) -> Self
     where
         P: Into<PathBuf>,

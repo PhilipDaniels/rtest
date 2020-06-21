@@ -5,14 +5,14 @@ use log::info;
 use std::io::Write;
 
 mod configuration;
-mod destination;
 mod engine;
 mod jobs;
+mod shadow_copy_destination;
 mod ui;
 
-use destination::DestinationDirectory;
 use engine::JobEngine;
 use jobs::shadow_copy::ShadowCopyJob;
+use shadow_copy_destination::ShadowCopyDestination;
 use ui::build_main_window;
 
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
@@ -33,7 +33,7 @@ fn main() {
     // This & is important to ensure the temp dir gets dropped when we exit,
     // otherwise it gets moved and dropped before we do the shadow-copy!
     let dest_dir =
-        DestinationDirectory::new(&config.source_directory, &config.destination_directory);
+        ShadowCopyDestination::new(&config.source_directory, &config.destination_directory);
     if dest_dir.is_copying() {
         let job = ShadowCopyJob::new(dest_dir);
         engine.add_job(job);
