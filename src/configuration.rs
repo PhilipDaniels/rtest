@@ -6,7 +6,7 @@ use tempfile::TempDir;
 
 /// Specifies the mode that the shadow-copy destination directory works in.
 #[derive(Debug)]
-pub enum Destination {
+pub enum DestinationType {
     /// The source directory is used. No shadow-copying is done.
     SourceDirectory(PathBuf),
     /// A specific, user-named directory is used.
@@ -19,7 +19,7 @@ pub enum Destination {
 pub struct Configuration {
     /// The directory that contains the sources we will be testing.
     pub source_directory: PathBuf,
-    pub destination_directory: Destination,
+    pub destination_directory: DestinationType,
 }
 
 pub fn new() -> Configuration {
@@ -29,12 +29,12 @@ pub fn new() -> Configuration {
     let destination_directory = if args.do_shadow_copy {
         if args.destination.is_none() {
             let dir = tempfile::tempdir().expect("Cannot create tempdir");
-            Destination::TempDirectory(dir)
+            DestinationType::TempDirectory(dir)
         } else {
-            Destination::NamedDirectory(args.destination.unwrap())
+            DestinationType::NamedDirectory(args.destination.unwrap())
         }
     } else {
-        Destination::SourceDirectory(args.source.clone())
+        DestinationType::SourceDirectory(args.source.clone())
     };
 
     Configuration {

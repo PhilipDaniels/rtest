@@ -5,11 +5,12 @@ use log::info;
 use std::io::Write;
 
 mod configuration;
+mod destination;
 mod engine;
 mod jobs;
 mod ui;
 
-use configuration::Destination;
+use destination::DestinationDirectory;
 use engine::JobEngine;
 use jobs::shadow_copy::ShadowCopyJob;
 use ui::build_main_window;
@@ -31,16 +32,11 @@ fn main() {
     // If a shadow copy operation is required, kick one off.
     // This & is important to ensure the temp dir gets dropped when we exit,
     // otherwise it gets moved and dropped before we do the shadow-copy!
-    match &config.destination_directory {
-        Destination::SourceDirectory(_) => {}
-        Destination::NamedDirectory(pathbuf) => {
-            let job = ShadowCopyJob::new(config.source_directory.clone(), pathbuf.clone());
-            engine.add_job(job);
-        }
-        Destination::TempDirectory(tempdir) => {
-            let job = ShadowCopyJob::new(config.source_directory.clone(), tempdir.path().into());
-            engine.add_job(job);
-        }
+    let dest_dir =
+        DestinationDirectory::new(&config.source_directory, &config.destination_directory);
+    if dest_dir.is_copying() {
+        let job = ShadowCopyJob::new(dest_dir);
+        engine.add_job(job);
     }
 
     create_main_window();

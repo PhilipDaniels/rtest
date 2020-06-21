@@ -125,7 +125,5 @@ Perform shadow copy
 
 
 Some more concepts we have
-    - Convert source file path to dest file path
-    - Create needed directories in destination
     - Where the .gitignore files are and how to use them
 */
