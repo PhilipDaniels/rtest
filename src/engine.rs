@@ -43,16 +43,25 @@ impl JobQueue {
     //     lock.pop_front()
     // }
 
-    fn get_next_job(&self) -> Job {
+    fn get_next_pending_job(&self) -> &mut Job {
         let mut jobs = self.jobs.lock().unwrap();
         loop {
-            match jobs.pop_front() {
+            let job = jobs.iter_mut().find(|j| j.is_pending());
+            match job {
                 Some(job) => return job,
                 None => {
                     info!("All jobs processed, sleeping");
                     jobs = self.cvar.wait(jobs).unwrap();
                 }
             }
+
+            // match jobs.pop_front() {
+            //     Some(job) => return job,
+            //     None => {
+            //         info!("All jobs processed, sleeping");
+            //         jobs = self.cvar.wait(jobs).unwrap();
+            //     }
+            // }
         }
     }
 }
@@ -74,10 +83,10 @@ impl JobEngine {
             let completed_jobs = completed_jobs.clone();
 
             move || loop {
-                let mut job = pending_jobs.get_next_job();
+                let job = pending_jobs.get_next_pending_job();
                 job.execute();
-                let mut cj = completed_jobs.lock().unwrap();
-                cj.push(job);
+                //let mut cj = completed_jobs.lock().unwrap();
+                //cj.push(job);
             }
         });
 
