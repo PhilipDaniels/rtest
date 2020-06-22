@@ -1,12 +1,12 @@
 use crate::{
-    shadow_copy_destination::ShadowCopyDestination,
     jobs::{Job, JobKind},
+    shadow_copy_destination::ShadowCopyDestination,
 };
 use ignore::WalkBuilder;
 use log::info;
 use std::fmt::Display;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ShadowCopyJob {
     destination: ShadowCopyDestination,
     num_files_copied: usize,

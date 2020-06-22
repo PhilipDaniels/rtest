@@ -1,7 +1,7 @@
 use crate::jobs::Job;
-use log::{error, info};
+use log::info;
 use std::collections::VecDeque;
-use std::sync::{Arc, Condvar, Mutex, atomic::AtomicBool};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
 
 pub struct JobEngine {
@@ -39,24 +39,36 @@ impl JobEngine {
         let builder = thread::Builder::new().name("JobWorker".into());
 
         let join_handle = builder
-            .spawn(move || loop {
-                let mut pause_flag = pause_flag.lock().unwrap();
-                while *pause_flag {
-                    info!("Pausing JobWorker thread inside itself");
-                    pause_flag = pause_signal.wait(pause_flag).unwrap();
-                }
-                drop(pause_flag);
-
-                let mut jobs = jobs.lock().unwrap();
-                let next_job = jobs.iter_mut().find(|job: &&mut Job| job.is_pending());
-
-                match next_job {
-                    Some(job) => {
-                        job.execute();
+            .spawn(move || {
+                // The loop makes this thread run forever.
+                loop {
+                    {
+                        // Wait for pause_flag to go `false`. Do this by waiting using the Condvar,
+                        // this means we are not using CPU cycles. The extra scope is
+                        // so that the `pause_flag_guard` gets dropped and the lock released.
+                        let mut pause_flag_guard = pause_flag.lock().unwrap();
+                        while *pause_flag_guard {
+                            info!("Pausing JobWorker thread inside itself");
+                            pause_flag_guard = pause_signal.wait(pause_flag_guard).unwrap();
+                        }
                     }
-                    None => {
-                        info!("All jobs processed, sleeping");
-                        jobs = job_signal.wait(jobs).unwrap();
+
+                    // If we get to here then the worker thread is running. There may or may
+                    // not be any pending jobs to process. Execute at most one job (so that
+                    // there is a chance to pause between jobs).
+                    let mut jobs_guard = jobs.lock().unwrap();
+                    match jobs_guard
+                        .iter_mut()
+                        .find(|job: &&mut Job| job.is_pending())
+                    {
+                        Some(next_job) => next_job.execute(),
+                        None => {
+                            info!("All jobs processed, sleeping");
+                            // Here we just wait for work to become available. We don't care about the
+                            // return value of `wait`, because we will re-get `jobs_guard` above,
+                            // when we come round the loop again.
+                            let _ = job_signal.wait(jobs_guard).unwrap();
+                        }
                     }
                 }
             })

@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use druid::{AppLauncher, LocalizedString, WindowDesc};
 use env_logger::Builder;
 use log::info;
-use std::{time::Duration, io::Write};
+use std::io::Write;
 
 mod configuration;
 mod engine;

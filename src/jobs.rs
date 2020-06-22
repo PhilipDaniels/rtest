@@ -104,6 +104,7 @@ impl JobKind {
 }
 
 /// Every Job has a unique id.
+/// The requirement for uniqueness means that this type cannot be cloned.
 #[derive(Debug)]
 pub struct JobId {
     id: usize,
@@ -125,6 +126,8 @@ impl JobId {
     }
 }
 
+/// A Job is a short-lived unit of work that can be executed by the `JobEngine`.
+/// n.b. All jobs have a unique identifier, which means they cannot be copied or cloned.
 #[derive(Debug)]
 pub struct Job {
     id: JobId,
@@ -152,7 +155,7 @@ impl Job {
     pub fn is_pending(&self) -> bool {
         match self.status {
             JobStatus::Pending(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
