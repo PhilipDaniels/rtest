@@ -28,6 +28,7 @@ fn main() {
     info!("{:?}", config);
 
     let mut engine = JobEngine::new();
+    engine.start();
 
     // If a shadow copy operation is required, kick one off.
     // This & is important to ensure the temp dir gets dropped when we exit,
@@ -74,6 +75,8 @@ fn configure_logging() {
 }
 
 fn create_main_window() {
+    info!("Creating main window");
+
     let title_string = LocalizedString::new("rtest-main-window-title")
         .with_placeholder(format!("{} - TDD for Rust", CARGO_PKG_NAME));
 
