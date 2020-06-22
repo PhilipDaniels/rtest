@@ -1,85 +1,86 @@
 use crate::jobs::Job;
 use log::info;
 use std::collections::VecDeque;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, atomic::{Ordering, AtomicBool}};
 use std::thread::{self, JoinHandle};
 
-type JobQ = Arc<Mutex<VecDeque<Job>>>;
+
+enum JobEngineState {
+    Stopped,
+    WaitingForWork,
+    Running
+}
 
 pub struct JobEngine {
-    pending_jobs: JobQ,
-    completed_jobs: JobQ,
-    pending_jobs_signal_variable: Condvar,
-    job_processor: JoinHandle<()>,
+    jobs: Arc<Mutex<VecDeque<Job>>>,
+    job_signal: Arc<Condvar>,
+    //enabled: Arc<AtomicBool>,
 }
 
 /// Based on https://www.poor.dev/posts/what-job-queue/.
 impl JobEngine {
     pub fn new() -> Self {
-        let pending_jobs = Arc::new(Mutex::new(VecDeque::<Job>::new()));
-        let completed_jobs = Arc::new(Mutex::new(VecDeque::<Job>::new()));
+        Self {
+            jobs: Arc::new(Mutex::new(VecDeque::new())),
+            job_signal: Arc::new(Condvar::new()),
+      //      enabled: Arc::new(AtomicBool::new(true)),
+        }
+    }
 
-        let job_processor = thread::spawn({
-            let pending_jobs = pending_jobs.clone();
-            let completed_jobs = completed_jobs.clone();
+    pub fn start(&self) {
+        let jobs = self.jobs.clone();
+        let job_signal = self.job_signal.clone();
+        //let enabled = self.enabled.clone();
 
+        thread::spawn({
             move || loop {
-                let mut job_lock = pending_jobs.lock().unwrap();
-                let next_job = job_lock.iter_mut().find(|job: &&mut Job|  job.is_pending());
+                // if !enabled.load(Ordering::SeqCst) {
+                //     return;
+                // }
+
+                let mut jobs = jobs.lock().unwrap();
+                let next_job = jobs.iter_mut().find(|job: &&mut Job|  job.is_pending());
+
                 match next_job {
                     Some(job) => {
                         job.execute();
-                        // Can't do this yet, need to remove the job from the pending_jobs queue.
-                        // let mut cj = completed_jobs.lock().unwrap();
-                        // cj.push_back(job);
                     }
                     None => {
                         info!("All jobs processed, sleeping");
-                        //let jobs = pending_jobs_signal_variable.wait(jobs).unwrap();
+                        jobs = job_signal.wait(jobs).unwrap();
                     }
                 }
             }
         });
-
-        Self {
-            pending_jobs,
-            completed_jobs,
-            pending_jobs_signal_variable: Condvar::new(),
-            job_processor,
-        }
     }
 
-    fn process_jobs(&self) {
-
+    pub fn stop(&self) {
     }
 
-    pub fn add_job(&mut self, job: Job) {
+    pub fn add_job(&self, job: Job) {
         assert!(job.is_pending());
-        let mut job_lock = self.pending_jobs.lock().unwrap();
+        let mut job_lock = self.jobs.lock().unwrap();
         job_lock.push_back(job);
-        // Tell everybody listening (really it's just us) that there is now
+        // Tell everybody listening (really it's just us with one thread) that there is now
         // a job in the pending queue.
-        self.pending_jobs_signal_variable.notify_all();
+        self.job_signal.notify_all();
     }
 
     pub fn num_pending(&self) -> usize {
-        let job_lock = self.pending_jobs.lock().unwrap();
+        let job_lock = self.jobs.lock().unwrap();
         job_lock.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        let job_lock = self.pending_jobs.lock().unwrap();
+        let job_lock = self.jobs.lock().unwrap();
         job_lock.is_empty()
     }
 
-    pub fn num_completed_len(&self) -> usize {
-        let job_lock = self.completed_jobs.lock().unwrap();
-        job_lock.len()
-    }
+    // pub fn num_completed_len(&self) -> usize {
+    //     let job_lock = self.completed_jobs.lock().unwrap();
+    //     job_lock.len()
+    // }
 }
-
-
-
 /*
 We need the following
 
