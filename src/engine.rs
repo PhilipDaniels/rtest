@@ -1,13 +1,15 @@
 use crate::jobs::Job;
 use log::{error, info};
 use std::collections::VecDeque;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, atomic::AtomicBool};
 use std::thread::{self, JoinHandle};
 
 pub struct JobEngine {
     jobs: Arc<Mutex<VecDeque<Job>>>,
     job_signal: Arc<Condvar>,
     worker: Option<JoinHandle<()>>,
+    pause_flag: Arc<Mutex<bool>>,
+    pause_signal: Arc<Condvar>,
 }
 
 /// Based on https://www.poor.dev/posts/what-job-queue/.
@@ -17,6 +19,8 @@ impl JobEngine {
             jobs: Arc::new(Mutex::new(VecDeque::new())),
             job_signal: Arc::new(Condvar::new()),
             worker: None,
+            pause_flag: Arc::new(Mutex::new(false)),
+            pause_signal: Arc::new(Condvar::new()),
         }
     }
 
@@ -30,10 +34,19 @@ impl JobEngine {
 
         let jobs = self.jobs.clone();
         let job_signal = self.job_signal.clone();
+        let pause_flag = self.pause_flag.clone();
+        let pause_signal = self.pause_signal.clone();
         let builder = thread::Builder::new().name("JobWorker".into());
 
         let join_handle = builder
             .spawn(move || loop {
+                let mut pause_flag = pause_flag.lock().unwrap();
+                while *pause_flag {
+                    info!("Pausing JobWorker thread inside itself");
+                    pause_flag = pause_signal.wait(pause_flag).unwrap();
+                }
+                drop(pause_flag);
+
                 let mut jobs = jobs.lock().unwrap();
                 let next_job = jobs.iter_mut().find(|job: &&mut Job| job.is_pending());
 
@@ -52,16 +65,18 @@ impl JobEngine {
         self.worker = Some(join_handle);
     }
 
-    /// FIXME: You can't join a thread that has called `wait`.
-    /// Need more sophisticated state transition management.
-    /// Don't really need to kill the thread, just make it wait some more.
-    pub fn stop(&mut self) {
-        if let Some(worker) = self.worker.take() {
-            match worker.join() {
-                Ok(_) => info!("Successfully terminated the JobWorker thread"),
-                Err(err) => error!("Error terminating worker thread {:?}", err),
-            }
-        }
+    pub fn pause(&mut self) {
+        info!("Pausing JobWorker thread");
+        let mut pause_flag = self.pause_flag.lock().unwrap();
+        *pause_flag = true;
+        self.pause_signal.notify_all();
+    }
+
+    pub fn restart(&mut self) {
+        info!("Restarting JobWorker thread");
+        let mut pause_flag = self.pause_flag.lock().unwrap();
+        *pause_flag = false;
+        self.pause_signal.notify_all();
     }
 
     pub fn add_job(&self, job: Job) {
@@ -109,4 +124,9 @@ Perform shadow copy
 
 Some more concepts we have
     - Where the .gitignore files are and how to use them
+
+Alternative data structure
+    - We maintain a list of jobs in a Vec but do not process in that Vec
+    - A thread pulls jobs off and clones them, then executes them separately,
+      perhaps using a channel.
 */

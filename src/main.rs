@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use druid::{AppLauncher, LocalizedString, WindowDesc};
 use env_logger::Builder;
 use log::info;
-use std::io::Write;
+use std::{time::Duration, io::Write};
 
 mod configuration;
 mod engine;
@@ -36,8 +36,17 @@ fn main() {
     let dest_dir =
         ShadowCopyDestination::new(&config.source_directory, &config.destination_directory);
     if dest_dir.is_copying() {
-        let job = ShadowCopyJob::new(dest_dir);
+        let job = ShadowCopyJob::new(dest_dir.clone());
         engine.add_job(job);
+        std::thread::sleep(Duration::from_secs(5));
+
+        engine.pause();
+
+        let job = ShadowCopyJob::new(dest_dir);
+        info!("Adding 2nd job while engine is paused");
+        engine.add_job(job);
+        std::thread::sleep(Duration::from_secs(15));
+        engine.restart();
     }
 
     create_main_window();
