@@ -38,15 +38,6 @@ fn main() {
     if dest_dir.is_copying() {
         let job = ShadowCopyJob::new(dest_dir.clone());
         engine.add_job(job);
-        std::thread::sleep(Duration::from_secs(5));
-
-        engine.pause();
-
-        let job = ShadowCopyJob::new(dest_dir);
-        info!("Adding 2nd job while engine is paused");
-        engine.add_job(job);
-        std::thread::sleep(Duration::from_secs(15));
-        engine.restart();
     }
 
     create_main_window();
