@@ -9,6 +9,7 @@ mod engine;
 mod jobs;
 mod shadow_copy_destination;
 mod ui;
+mod watcher;
 
 use engine::JobEngine;
 use jobs::shadow_copy::ShadowCopyJob;

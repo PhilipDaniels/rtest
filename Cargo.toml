@@ -14,10 +14,10 @@ env_logger = "0.7"
 ignore = "0.4"
 log = "0.4"
 logging_timer = "1.0.0"
+notify = "4.0"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 tempfile = "3.1"
-# crossbeam = "0.7"
 
 [profile.dev]
 opt-level = 1
