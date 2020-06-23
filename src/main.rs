@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use druid::{AppLauncher, LocalizedString, WindowDesc};
 use env_logger::Builder;
 use log::info;
-use std::io::Write;
+use std::{sync::mpsc::channel, io::Write};
 
 mod configuration;
 mod engine;
@@ -15,7 +15,7 @@ use engine::JobEngine;
 use jobs::shadow_copy::ShadowCopyJob;
 use shadow_copy_destination::ShadowCopyDestination;
 use ui::build_main_window;
-use source_directory_watcher::SourceDirectoryWatcher;
+use source_directory_watcher::{FileSyncEvent, SourceDirectoryWatcher};
 
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CARGO_PKG_AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
@@ -42,7 +42,8 @@ fn main() {
         engine.add_job(job);
     }
 
-    let watcher = SourceDirectoryWatcher::new(&config.source_directory);
+    let (sender, receiver) = channel::<FileSyncEvent>();
+    let watcher = SourceDirectoryWatcher::new(&config.source_directory, sender);
 
     create_main_window();
     info!("Stopping {}", CARGO_PKG_NAME);

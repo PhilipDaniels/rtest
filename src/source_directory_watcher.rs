@@ -1,12 +1,13 @@
 use log::info;
 use notify::{event::Event, EventKind, RecommendedWatcher, RecursiveMode, Result, Watcher};
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::mpsc::Sender};
 
 /// Watch a directory (nominally the source directory for the Shadow Copy)
 /// and emit file created/deleted/changed events as they happen.
 pub struct SourceDirectoryWatcher {
     directory: PathBuf,
     watcher: RecommendedWatcher,
+    sender: Sender<FileSyncEvent>,
 }
 
 enum FileSyncEventKind {
@@ -16,14 +17,14 @@ enum FileSyncEventKind {
 }
 
 #[derive(Debug, Clone)]
-enum FileSyncEvent {
+pub enum FileSyncEvent {
     Create(Vec<PathBuf>),
     Modify(Vec<PathBuf>),
     Remove(Vec<PathBuf>),
 }
 
 impl SourceDirectoryWatcher {
-    pub fn new<P>(directory: P) -> Self
+    pub fn new<P>(directory: P, sender: Sender<FileSyncEvent>) -> Self
     where
         P: Into<PathBuf>,
     {
@@ -33,9 +34,11 @@ impl SourceDirectoryWatcher {
         let directory = directory.into();
         watcher.watch(&directory, RecursiveMode::Recursive).unwrap();
 
-        let sdw = Self { directory, watcher };
-
-        sdw
+        Self {
+            directory,
+            watcher,
+            sender,
+        }
     }
 
     fn watch_event_handler(event_result: Result<Event>) {
