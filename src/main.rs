@@ -9,12 +9,13 @@ mod engine;
 mod jobs;
 mod shadow_copy_destination;
 mod ui;
-mod watcher;
+mod source_directory_watcher;
 
 use engine::JobEngine;
 use jobs::shadow_copy::ShadowCopyJob;
 use shadow_copy_destination::ShadowCopyDestination;
 use ui::build_main_window;
+use source_directory_watcher::SourceDirectoryWatcher;
 
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CARGO_PKG_AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
@@ -40,6 +41,8 @@ fn main() {
         let job = ShadowCopyJob::new(dest_dir.clone());
         engine.add_job(job);
     }
+
+    let watcher = SourceDirectoryWatcher::new(&config.source_directory);
 
     create_main_window();
     info!("Stopping {}", CARGO_PKG_NAME);
