@@ -74,6 +74,8 @@ impl JobEngine {
             })
             .expect("Expected to create the JobWorker thread");
 
+        info!("Successfully spawned JobWorker thread");
+
         self.worker = Some(join_handle);
     }
 

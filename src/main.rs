@@ -2,20 +2,20 @@ use chrono::{DateTime, Utc};
 use druid::{AppLauncher, LocalizedString, WindowDesc};
 use env_logger::Builder;
 use log::info;
-use std::{sync::mpsc::channel, io::Write};
+use std::{io::Write, sync::mpsc::channel};
 
 mod configuration;
 mod engine;
 mod jobs;
 mod shadow_copy_destination;
-mod ui;
 mod source_directory_watcher;
+mod ui;
 
 use engine::JobEngine;
 use jobs::shadow_copy::ShadowCopyJob;
 use shadow_copy_destination::ShadowCopyDestination;
+use source_directory_watcher::FileSyncEvent;
 use ui::build_main_window;
-use source_directory_watcher::{FileSyncEvent, SourceDirectoryWatcher};
 
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CARGO_PKG_AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
@@ -43,10 +43,7 @@ fn main() {
     }
 
     let (sender, receiver) = channel::<FileSyncEvent>();
-    let dir = config.source_directory.clone();
-    std::thread::spawn(move || {
-        source_directory_watcher::start_watching(dir, sender);
-    });
+    source_directory_watcher::start_watching(&config.source_directory, sender);
 
     std::thread::spawn(move || {
         for event in receiver {
@@ -54,10 +51,9 @@ fn main() {
         }
     });
 
-    // let watcher = SourceDirectoryWatcher::new(&config.source_directory, sender);
-
     // This blocks this thread.
     create_main_window();
+
     info!("Stopping {}", CARGO_PKG_NAME);
 }
 
