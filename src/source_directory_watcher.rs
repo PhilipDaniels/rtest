@@ -80,7 +80,7 @@ where P: Into<PathBuf>
     ];
 
     let mut args = ArgsBuilder::default()
-        .cmd(vec!["echo hello world".into()])
+        .cmd(vec!["".into()])
         .paths(vec![path.into()])
         .ignores(list)
         .run_initially(false)
