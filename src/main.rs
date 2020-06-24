@@ -24,7 +24,7 @@ pub const CARGO_PKG_REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 pub const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() {
-    //configure_logging();
+    configure_logging();
     info!("Starting {}", CARGO_PKG_NAME);
     let config = configuration::new();
     info!("{:?}", config);

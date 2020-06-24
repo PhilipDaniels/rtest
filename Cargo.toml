@@ -18,7 +18,7 @@ notify = "4.0.13"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 tempfile = "3.1"
-watchexec = "1.13.1"
+watchexec = { git = "https://github.com/PhilipDaniels/watchexec", branch = "main" }
 
 [profile.dev]
 opt-level = 1
