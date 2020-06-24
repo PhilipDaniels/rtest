@@ -14,10 +14,11 @@ env_logger = "0.7"
 ignore = "0.4"
 log = "0.4"
 logging_timer = "1.0.0"
-notify = "5.0.0-pre.3"
+notify = "4.0.13"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 tempfile = "3.1"
+watchexec = "1.13.1"
 
 [profile.dev]
 opt-level = 1

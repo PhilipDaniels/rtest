@@ -24,7 +24,7 @@ pub const CARGO_PKG_REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 pub const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() {
-    configure_logging();
+    //configure_logging();
     info!("Starting {}", CARGO_PKG_NAME);
     let config = configuration::new();
     info!("{:?}", config);
@@ -42,8 +42,13 @@ fn main() {
         engine.add_job(job);
     }
 
-    let (sender, receiver) = channel::<FileSyncEvent>();
-    let watcher = SourceDirectoryWatcher::new(&config.source_directory, sender);
+    let dir = config.source_directory.clone();
+    std::thread::spawn(move || {
+        source_directory_watcher::start_watching(dir);
+    });
+
+    // let (sender, receiver) = channel::<FileSyncEvent>();
+    // let watcher = SourceDirectoryWatcher::new(&config.source_directory, sender);
 
     create_main_window();
     info!("Stopping {}", CARGO_PKG_NAME);
