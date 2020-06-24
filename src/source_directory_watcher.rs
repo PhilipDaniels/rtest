@@ -1,5 +1,5 @@
 use log::info;
-use notify::{RecommendedWatcher, RecursiveMode, Result, Watcher};
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
     path::{MAIN_SEPARATOR, PathBuf},
     sync::mpsc::{channel, Sender},
@@ -28,17 +28,18 @@ pub struct FileEventHandler {
 
 impl Handler for FileEventHandler {
     fn on_manual(&self) -> watchexec::error::Result<bool> {
-        println!("OnMANUAL");
         Ok(true)
     }
 
     fn on_update(&self, ops: &[watchexec::pathop::PathOp]) -> watchexec::error::Result<bool> {
-        println!("On_Update {:?}", ops);
+        for op in ops {
+            info!("On_Update {:?}", op);
+        }
+
         Ok(true)
     }
 
     fn args(&self) -> Args {
-        println!("ARGS");
         self.args.clone()
     }
 }
@@ -51,11 +52,23 @@ impl FileEventHandler {
     }
 }
 
+/*
+THIS IS A RENAME FROM KATE
+ { path: "/home/phil/repos/rtest/a.txt.h27685", op: Some(RENAME), cookie: Some(274698) }
+ { path: "/home/phil/repos/rtest/a.txt", op: Some(RENAME), cookie: Some(274698) }
+
+FOR SOME PATH P
+If a build is running, stop it
+If OP is REMOVE, remove all file copy jobs and create a remove job
+ELSE
+    if there is a previous job for this file, remove it and insert a new COPY job (op is likely to be WRITE, CLOSE_WRITE, RENAME or CHMOD)
+ */
+
 pub fn start_watching<P>(path: P)
 where P: Into<PathBuf>
 {
     // Note that this list of ignores is a glob list, not a regex-list.
-    // Taken from cargo-watch/lib.rs.
+    // Taken from cargo-watch/lib.rs and edited a bit.
     let mut list = vec![
         // Mac
         format!("*{}.DS_Store", MAIN_SEPARATOR),
@@ -67,6 +80,8 @@ where P: Into<PathBuf>
         ".#*".into(),
         // Kate
         ".*.kate-swp".into(),
+        // GEdit
+        ".goutputstream*".into(),
         // VCS
         format!("*{s}.hg{s}**", s = MAIN_SEPARATOR),
         format!("*{s}.git{s}**", s = MAIN_SEPARATOR),
@@ -79,16 +94,14 @@ where P: Into<PathBuf>
         format!("*{s}target{s}**", s = MAIN_SEPARATOR),
     ];
 
-    let mut args = ArgsBuilder::default()
+    let args = ArgsBuilder::default()
         .cmd(vec!["".into()])
         .paths(vec![path.into()])
         .ignores(list)
         .run_initially(false)
-        .debounce(2_000u64)
+        .debounce(1000_u64)
         .build()
         .expect("Construction of Args failed");
-
-    println!("SETTINGS ARGS = {:?}", args);
 
     let handler = FileEventHandler::new(args);
     watchexec::run::watch(&handler).unwrap();
