@@ -23,7 +23,8 @@ fn main() -> watchexec::error::Result<()> {
 */
 
 pub struct FileEventHandler {
-    args: Args
+    args: Args,
+    sender: Sender<FileSyncEvent>,
 }
 
 impl Handler for FileEventHandler {
@@ -34,6 +35,8 @@ impl Handler for FileEventHandler {
     fn on_update(&self, ops: &[watchexec::pathop::PathOp]) -> watchexec::error::Result<bool> {
         for op in ops {
             info!("On_Update {:?}", op);
+            let event = FileSyncEvent::Create(vec![]);
+            self.sender.send(event).unwrap();
         }
 
         Ok(true)
@@ -45,9 +48,10 @@ impl Handler for FileEventHandler {
 }
 
 impl FileEventHandler {
-    fn new(args: Args) -> Self {
+    fn new(args: Args, sender: Sender<FileSyncEvent>) -> Self {
         Self {
-            args
+            args,
+            sender
         }
     }
 }
@@ -64,7 +68,7 @@ ELSE
     if there is a previous job for this file, remove it and insert a new COPY job (op is likely to be WRITE, CLOSE_WRITE, RENAME or CHMOD)
  */
 
-pub fn start_watching<P>(path: P)
+pub fn start_watching<P>(path: P, sender: Sender<FileSyncEvent>)
 where P: Into<PathBuf>
 {
     // Note that this list of ignores is a glob list, not a regex-list.
@@ -103,7 +107,7 @@ where P: Into<PathBuf>
         .build()
         .expect("Construction of Args failed");
 
-    let handler = FileEventHandler::new(args);
+    let handler = FileEventHandler::new(args, sender);
     watchexec::run::watch(&handler).unwrap();
 }
 

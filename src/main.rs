@@ -42,14 +42,21 @@ fn main() {
         engine.add_job(job);
     }
 
+    let (sender, receiver) = channel::<FileSyncEvent>();
     let dir = config.source_directory.clone();
     std::thread::spawn(move || {
-        source_directory_watcher::start_watching(dir);
+        source_directory_watcher::start_watching(dir, sender);
     });
 
-    // let (sender, receiver) = channel::<FileSyncEvent>();
+    std::thread::spawn(move || {
+        for event in receiver {
+            info!("Got EVENT {:?}", event);
+        }
+    });
+
     // let watcher = SourceDirectoryWatcher::new(&config.source_directory, sender);
 
+    // This blocks this thread.
     create_main_window();
     info!("Stopping {}", CARGO_PKG_NAME);
 }
