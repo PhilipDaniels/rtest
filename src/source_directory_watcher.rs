@@ -5,7 +5,7 @@ use std::{
     thread,
 };
 use watchexec::cli::ArgsBuilder;
-use watchexec::{Args, Handler};
+use watchexec::{pathop::PathOp, Args, Handler};
 
 /// Start a 'cargo-watch-like' watch process on `path` (which will be the source directory).
 /// The watch ignores everything that `.gitignore` would ignore, so that only changes relating
@@ -23,9 +23,11 @@ where
     let handler = FileEventHandler::new(args, sender);
 
     let thread_builder = thread::Builder::new().name("DirectoryWatcher".into());
-    thread_builder.spawn(move || {
-        watchexec::run::watch(&handler).unwrap();
-    }).expect("Cannot create background thread to run the directory watcher");
+    thread_builder
+        .spawn(move || {
+            watchexec::run::watch(&handler).unwrap();
+        })
+        .expect("Cannot create background thread to run the directory watcher");
     info!("Successfully spawned DirectoryWatcher background thread");
 }
 
@@ -73,7 +75,6 @@ where
         .expect("Construction of Args failed")
 }
 
-
 /// This struct is used to impl the `Handler` trait from `watchexec`.
 /// File system events are raised as events on the `sender`.
 struct FileEventHandler {
@@ -81,21 +82,57 @@ struct FileEventHandler {
     sender: Sender<FileSyncEvent>,
 }
 
+#[derive(Debug, Clone)]
+pub enum FileSyncEvent {
+    Update(PathBuf),
+    Remove(PathBuf),
+}
+
 impl Handler for FileEventHandler {
+    /// This method is the one that is called by `watchexec` when a file system event occurs.
+    /// Events will have been somewhat debounced already, but we still get a large number
+    /// of events for a single file. And because different editors use different strategies of saving
+    /// and creating files (including use of backup files and renames) there is really no
+    /// telling what sequence of events we might get.
+    ///
+    /// However, we really only care about two things:
+    /// 1. Files that have been deleted. We need to remove these from the shadow copy directory.
+    /// 2. Files that have been created or updated. We need to copy these over to the shadow copy
+    /// directory.
+    ///
+    /// For now, we simply emit all events.
+    /// However, if there ARE multiple paths for the same file in `ops` when this method is called
+    /// then we have the opportunity to coalesce them, as long as the above semantics are
+    /// maintained.
     fn on_update(&self, ops: &[watchexec::pathop::PathOp]) -> watchexec::error::Result<bool> {
         for op in ops {
-            info!("On_Update {:?}", op);
-            let event = FileSyncEvent::Create(vec![]);
-            self.sender.send(event).unwrap();
+            if op.op.is_none() {
+                continue;
+            }
+
+            let op_type = op.op.unwrap();
+            if PathOp::is_remove(op_type) {
+                let event = FileSyncEvent::Remove(op.path.clone());
+                self.sender.send(event).unwrap();
+            } else if PathOp::is_create(op_type)
+                || PathOp::is_rename(op_type)
+                || PathOp::is_write(op_type)
+            {
+                let event = FileSyncEvent::Update(op.path.clone());
+                self.sender.send(event).unwrap();
+            }
         }
 
         Ok(true)
     }
 
+    /// This is called if we ask `watchexec` to do a 'manual run'.
+    /// We aren't, so it never gets called.
     fn on_manual(&self) -> watchexec::error::Result<bool> {
         Ok(true)
     }
 
+    /// `watchexec` calls this once to get the args.
     fn args(&self) -> Args {
         self.args.clone()
     }
@@ -104,44 +141,5 @@ impl Handler for FileEventHandler {
 impl FileEventHandler {
     fn new(args: Args, sender: Sender<FileSyncEvent>) -> Self {
         Self { args, sender }
-    }
-}
-
-/*
-THIS IS A RENAME FROM KATE
- { path: "/home/phil/repos/rtest/a.txt.h27685", op: Some(RENAME), cookie: Some(274698) }
- { path: "/home/phil/repos/rtest/a.txt", op: Some(RENAME), cookie: Some(274698) }
-
-FOR SOME PATH P
-If a build is running, stop it
-If OP is REMOVE, remove all file copy jobs and create a remove job
-ELSE
-    if there is a previous job for this file, remove it and insert a new COPY job (op is likely to be WRITE, CLOSE_WRITE, RENAME or CHMOD)
- */
-
-
-
-enum FileSyncEventKind {
-    Create,
-    Modify,
-    Remove,
-}
-
-#[derive(Debug, Clone)]
-pub enum FileSyncEvent {
-    Create(Vec<PathBuf>),
-    Modify(Vec<PathBuf>),
-    Remove(Vec<PathBuf>),
-}
-
-fn make_event(kind: FileSyncEventKind, paths: Vec<PathBuf>) -> Option<FileSyncEvent> {
-    if paths.is_empty() {
-        None
-    } else {
-        Some(match kind {
-            FileSyncEventKind::Create => FileSyncEvent::Create(paths),
-            FileSyncEventKind::Modify => FileSyncEvent::Modify(paths),
-            FileSyncEventKind::Remove => FileSyncEvent::Remove(paths),
-        })
     }
 }

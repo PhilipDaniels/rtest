@@ -143,4 +143,11 @@ Alternative data structure
     - We maintain a list of jobs in a Vec but do not process in that Vec
     - A thread pulls jobs off and clones them, then executes them separately,
       perhaps using a channel.
+
+Algorithm for adding file sync jobs
+FOR SOME PATH P
+If a build is running, stop it
+If OP is REMOVE, remove all file copy jobs and create a remove job
+ELSE
+    if there is a previous job for this file, remove it and insert a new COPY job (op is likely to be WRITE, CLOSE_WRITE, RENAME or CHMOD)
 */
