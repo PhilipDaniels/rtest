@@ -3,7 +3,6 @@ use crate::{
     shadow_copy_destination::ShadowCopyDestination,
     source_directory_watcher::FileSyncEvent,
 };
-use log::info;
 use std::fmt::Display;
 
 #[derive(Debug, Clone)]
@@ -14,12 +13,12 @@ pub struct FileSyncJob {
 
 impl Display for FileSyncJob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Shadow copy from {:?} to {:?}",
-            self.destination.source_directory(),
-            self.destination.destination_directory()
-        )
+        let (s, pathbuf) = match &self.file_sync_event {
+            FileSyncEvent::Update(pb) => ("created/updated", pb),
+            FileSyncEvent::Remove(pb) => ("deleted", pb),
+        };
+
+        write!(f, "FileSync - {} file {:?}", s, pathbuf)
     }
 }
 

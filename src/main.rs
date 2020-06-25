@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use druid::{AppLauncher, LocalizedString, WindowDesc};
 use env_logger::Builder;
 use log::info;
-use std::{io::Write, sync::mpsc::channel};
+use std::{io::Write, sync::{Arc, mpsc::channel, Mutex}};
 
 mod configuration;
 mod engine;
@@ -29,8 +29,9 @@ fn main() {
     let config = configuration::new();
     info!("{:?}", config);
 
-    let mut engine = JobEngine::new();
-    engine.start();
+    let mut engine = Arc::new(Mutex::new(JobEngine::new()));
+    let mut engine_lock = engine.lock().unwrap();
+    engine_lock.start();
 
     // If a shadow copy operation is required, kick one off.
     // This & is important to ensure the temp dir gets dropped when we exit,
@@ -41,16 +42,20 @@ fn main() {
     if dest_dir.is_copying() {
         // Perform an initial full shadow copy.
         let job = ShadowCopyJob::new(dest_dir.clone());
-        engine.add_job(job);
+        engine_lock.add_job(job);
 
-        // Then watch for incremental file changes.
+        // Then watch for incremental file changes. Use another thread to
+        // add jobs to the engine.
         let (sender, receiver) = channel::<FileSyncEvent>();
         source_directory_watcher::start_watching(&config.source_directory, sender);
+        drop(engine_lock);
 
+        let engine2 = engine.clone();
         std::thread::spawn(move || {
             for event in receiver {
-                info!("Got EVENT {:?}", event);
                 let job = FileSyncJob::new(dest_dir.clone(), event);
+                let lock = engine2.lock().unwrap();
+                lock.add_job(job);
             }
         });
     }

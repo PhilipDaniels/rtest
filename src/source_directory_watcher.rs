@@ -1,4 +1,4 @@
-use log::info;
+use log::{debug, info};
 use std::{
     path::{PathBuf, MAIN_SEPARATOR},
     sync::mpsc::Sender,
@@ -105,6 +105,8 @@ impl Handler for FileEventHandler {
     /// then we have the opportunity to coalesce them, as long as the above semantics are
     /// maintained.
     fn on_update(&self, ops: &[watchexec::pathop::PathOp]) -> watchexec::error::Result<bool> {
+        debug!(">>> ON_UPDATE There are {} operations", ops.len());
+
         for op in ops {
             if op.op.is_none() {
                 continue;
