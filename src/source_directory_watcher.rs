@@ -82,9 +82,19 @@ struct FileEventHandler {
     sender: Sender<FileSyncEvent>,
 }
 
+/// High-level events that reflect the changes that are happening within the
+/// source directory. A job (FileSyncJob) takes care of making the corresponding
+/// changes in the destination directory.
 #[derive(Debug, Clone)]
 pub enum FileSyncEvent {
-    Update(PathBuf),
+    /// A file has been created or updated. In either case, we simply want to
+    /// copy the file from the source to the destination.
+    FileUpdate(PathBuf),
+    /// A directory has been created in the source. Strictly speaking, we do not need
+    /// to monitor these events, as creating a file in the destination directory will
+    /// automatically create all needed parent directories.
+    DirectoryCreate(PathBuf),
+    /// A file or directory has been deleted. We can't tell which.
     Remove(PathBuf),
 }
 
@@ -108,15 +118,29 @@ impl Handler for FileEventHandler {
         // Utility function to actually send the appropriate event.
         fn send_event(me: &FileEventHandler, op: &watchexec::pathop::PathOp) {
             let op_type = op.op.unwrap();
+
             if PathOp::is_remove(op_type) {
                 let event = FileSyncEvent::Remove(op.path.clone());
                 me.sender.send(event).unwrap();
-            } else if PathOp::is_create(op_type)
-                || PathOp::is_rename(op_type)
-                || PathOp::is_write(op_type)
-            {
-                let event = FileSyncEvent::Update(op.path.clone());
-                me.sender.send(event).unwrap();
+                return;
+            }
+
+            if std::path::Path::is_file(&op.path) {
+                if PathOp::is_create(op_type)
+                    || PathOp::is_rename(op_type)
+                    || PathOp::is_write(op_type)
+                {
+                    let event = FileSyncEvent::FileUpdate(op.path.clone());
+                    me.sender.send(event).unwrap();
+                }
+            } else if std::path::Path::is_dir(&op.path) {
+                if PathOp::is_create(op_type)
+                    || PathOp::is_rename(op_type)
+                    || PathOp::is_write(op_type)
+                {
+                    let event = FileSyncEvent::DirectoryCreate(op.path.clone());
+                    me.sender.send(event).unwrap();
+                }
             }
         }
 

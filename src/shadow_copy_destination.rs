@@ -44,43 +44,59 @@ impl ShadowCopyDestination {
         self.destination_directory.as_ref()
     }
 
-    /// Copies a file from the source directory to the destination directory.
-    /// This is a no-op if we are not shadow copying at all (i.e. it is safe)
-    /// to call if `DestinationKind` was `SourceDirectory`.
-    pub fn copy_file(&self, file: &Path) {
+    /// Copies a `source_file` from the source directory to the destination directory.
+    pub fn copy_file(&self, source_file: &Path) {
         if self.destination_directory.is_none() {
             return;
         }
 
-        let sub_path = self.get_source_sub_path(file);
-        let dest_path = self.get_dest_path(sub_path);
-        //Self::copy_starting_message(file, &dest_path);
+        let dest_file_path = self.get_path_in_destination(source_file);
 
-        match std::fs::copy(file, &dest_path) {
-            Ok(_) => Self::copy_succeeded_message(file, &dest_path),
+        match std::fs::copy(source_file, &dest_file_path) {
+            Ok(_) => Self::copy_succeeded_message(source_file, &dest_file_path),
             Err(_) => {
                 // Try again, probably the parent directory did not exist.
-                Self::create_parent_dir(&dest_path);
-                match std::fs::copy(file, &dest_path) {
-                    Ok(_) => Self::copy_succeeded_message(file, &dest_path),
-                    Err(err) => Self::copy_error_message(file, &dest_path, &err),
+                Self::create_destination_parent_dir_for_file(&dest_file_path);
+                match std::fs::copy(source_file, &dest_file_path) {
+                    Ok(_) => Self::copy_succeeded_message(source_file, &dest_file_path),
+                    Err(err) => Self::copy_error_message(source_file, &dest_file_path, &err),
                 }
             }
         }
     }
 
-    pub fn remove_file(&self, file: &Path) {
+    /// Given a `source_file`, removes the corresponding file in the destination.
+    pub fn remove_file_or_directory(&self, source_path: &Path) {
         if self.destination_directory.is_none() {
             return;
         }
 
-        let sub_path = self.get_source_sub_path(file);
-        let dest_path = self.get_dest_path(sub_path);
+        let dest_path = self.get_path_in_destination(source_path);
 
-        match std::fs::remove_file(&dest_path) {
-            Ok(_) => Self::remove_succeeded_message(&dest_path),
-            Err(err) => Self::remove_failed_message(&dest_path, &err),
+        if std::path::Path::is_dir(&dest_path) {
+            match std::fs::remove_dir_all(&dest_path) {
+                Ok(_) => info!("Removed destination directory {}", dest_path.display()),
+                Err(err) => error!(
+                    "Error removing destination directory {}, err = {}",
+                    dest_path.display(),
+                    err
+                ),
+            }
+        } else {
+            match std::fs::remove_file(&dest_path) {
+                Ok(_) => Self::remove_succeeded_message(&dest_path),
+                Err(err) => Self::remove_failed_message(&dest_path, &err),
+            }
         }
+    }
+
+    /// Converts a source path into a corresponding path in the destination directory.
+    fn get_path_in_destination(&self, source_path: &Path) -> PathBuf {
+        let source_sub_path = self.get_source_sub_path(source_path);
+        let mut dest_path = self.destination_directory.clone()
+            .expect("`get_path_in_destination` should only be called when there actually is a `destination_directory`");
+        dest_path.push(source_sub_path);
+        dest_path
     }
 
     fn copy_succeeded_message(source: &Path, destination: &Path) {
@@ -114,18 +130,33 @@ impl ShadowCopyDestination {
         file.strip_prefix(&self.source_directory).unwrap()
     }
 
-    fn get_dest_path(&self, file: &Path) -> PathBuf {
-        let mut dest_path = self.destination_directory.clone()
-            .expect("`get_dest_path` should only be called when there actually is a `destination_directory`");
-        dest_path.push(file);
-        dest_path
+    fn create_destination_parent_dir_for_file(destination_file: &Path) {
+        let parent_dir = destination_file.parent().unwrap();
+        Self::create_destination_dir(&parent_dir);
     }
 
-    fn create_parent_dir(file: &Path) {
-        let parent_dir = file.parent().unwrap();
-        match std::fs::create_dir_all(parent_dir) {
-            Ok(_) => info!("Created parent directory {}", parent_dir.display()),
-            Err(err) => error!("Error creating parent directory {}, err = {}", parent_dir.display(), err),
+    fn create_destination_dir(destination_directory: &Path) {
+        match std::fs::create_dir_all(destination_directory) {
+            Ok(_) => info!(
+                "Created destination directory {}",
+                destination_directory.display()
+            ),
+            Err(err) => error!(
+                "Error creating destination directory {}, err = {}",
+                destination_directory.display(),
+                err
+            ),
         }
+    }
+
+    /// Given a `source_directory`, creates the corresponding directory
+    /// in the destination.
+    pub fn create_directory(&self, source_directory: &Path) {
+        if self.destination_directory.is_none() {
+            return;
+        }
+
+        let dest_dir = self.get_path_in_destination(source_directory);
+        Self::create_destination_dir(&dest_dir);
     }
 }

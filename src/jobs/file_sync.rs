@@ -14,11 +14,12 @@ pub struct FileSyncJob {
 impl Display for FileSyncJob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (s, pathbuf) = match &self.file_sync_event {
-            FileSyncEvent::Update(pb) => ("created/updated", pb),
-            FileSyncEvent::Remove(pb) => ("deleted", pb),
+            FileSyncEvent::FileUpdate(pb) => ("created/updated file", pb),
+            FileSyncEvent::Remove(pb) => ("deleted file or directory", pb),
+            FileSyncEvent::DirectoryCreate(pb) => ("created directory", pb),
         };
 
-        write!(f, "FileSync - {} file {:?}", s, pathbuf)
+        write!(f, "FileSync - {} {:?}", s, pathbuf)
     }
 }
 
@@ -44,14 +45,17 @@ impl FileSyncJob {
 
     pub fn execute(&mut self) {
         match &self.file_sync_event {
-            FileSyncEvent::Update(path) => {
+            FileSyncEvent::FileUpdate(path) => {
                 if std::path::Path::is_file(path) {
                     self.destination.copy_file(path);
                 }
             }
             FileSyncEvent::Remove(path) => {
-                if std::path::Path::is_file(path) {
-                    self.destination.remove_file(path);
+                self.destination.remove_file_or_directory(path);
+            }
+            FileSyncEvent::DirectoryCreate(path) => {
+                if std::path::Path::is_dir(path) {
+                    self.destination.create_directory(path);
                 }
             }
         }
