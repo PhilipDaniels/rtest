@@ -144,7 +144,7 @@ Alternative data structure
     - A thread pulls jobs off and clones them, then executes them separately,
       perhaps using a channel.
 
-Algorithm for adding file sync jobs
+Algorithm for adding file sync
 FOR SOME PATH P
 If a build is running, stop it
 If OP is REMOVE, remove all file copy jobs and create a remove job

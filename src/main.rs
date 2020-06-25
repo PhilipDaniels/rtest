@@ -12,7 +12,7 @@ mod source_directory_watcher;
 mod ui;
 
 use engine::JobEngine;
-use jobs::shadow_copy::ShadowCopyJob;
+use jobs::{FileSyncJob, ShadowCopyJob};
 use shadow_copy_destination::ShadowCopyDestination;
 use source_directory_watcher::FileSyncEvent;
 use ui::build_main_window;
@@ -37,19 +37,23 @@ fn main() {
     // otherwise it gets moved and dropped before we do the shadow-copy!
     let dest_dir =
         ShadowCopyDestination::new(&config.source_directory, &config.destination_directory);
+
     if dest_dir.is_copying() {
+        // Perform an initial full shadow copy.
         let job = ShadowCopyJob::new(dest_dir.clone());
         engine.add_job(job);
+
+        // Then watch for incremental file changes.
+        let (sender, receiver) = channel::<FileSyncEvent>();
+        source_directory_watcher::start_watching(&config.source_directory, sender);
+
+        std::thread::spawn(move || {
+            for event in receiver {
+                info!("Got EVENT {:?}", event);
+                let job = FileSyncJob::new(dest_dir.clone(), event);
+            }
+        });
     }
-
-    let (sender, receiver) = channel::<FileSyncEvent>();
-    source_directory_watcher::start_watching(&config.source_directory, sender);
-
-    std::thread::spawn(move || {
-        for event in receiver {
-            info!("Got EVENT {:?}", event);
-        }
-    });
 
     // This blocks this thread.
     create_main_window();

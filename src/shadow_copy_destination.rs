@@ -69,8 +69,30 @@ impl ShadowCopyDestination {
         }
     }
 
+    pub fn remove_file(&self, file: &Path) {
+        if self.destination_directory.is_none() {
+            return;
+        }
+
+        let sub_path = self.get_source_sub_path(file);
+        let dest_path = self.get_dest_path(sub_path);
+
+        match std::fs::remove_file(&dest_path) {
+            Ok(_) => Self::remove_succeeded_message(&dest_path),
+            Err(err) => Self::remove_failed_message(&dest_path, &err),
+        }
+    }
+
     fn copy_succeeded_message(source: &Path, destination: &Path) {
         info!("Copied   {} to {}", source.display(), destination.display());
+    }
+
+    fn remove_succeeded_message(destination: &Path) {
+        info!("Removed  {}", destination.display());
+    }
+
+    fn remove_failed_message(destination: &Path, err: &std::io::Error) {
+        info!("REMOVEFAIL  {}, err = {}", destination.display(), err);
     }
 
     fn copy_starting_message(source: &Path, destination: &Path) {
@@ -78,7 +100,12 @@ impl ShadowCopyDestination {
     }
 
     fn copy_error_message(source: &Path, destination: &Path, err: &std::io::Error) {
-        error!("COPYFAIL {} to {}, err = {}", source.display(), destination.display(), err);
+        error!(
+            "COPYFAIL {} to {}, err = {}",
+            source.display(),
+            destination.display(),
+            err
+        );
     }
 
     /// Calculates the 'sub path' component of a file within the source directory.

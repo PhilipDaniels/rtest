@@ -1,9 +1,12 @@
-pub mod shadow_copy;
+mod file_sync;
+mod shadow_copy;
+
+pub use file_sync::FileSyncJob;
+pub use shadow_copy::ShadowCopyJob;
 
 use chrono::{DateTime, Utc};
 use log::info;
 use logging_timer::stime;
-use shadow_copy::ShadowCopyJob;
 use std::{
     fmt::Display,
     sync::atomic::{AtomicUsize, Ordering},
@@ -85,12 +88,15 @@ pub enum JobKind {
     /// Perform a shadow copy from the first directory (the source) to
     /// the second directory (the destination)
     ShadowCopy(ShadowCopyJob),
+    /// Perform a file sync (copy or delete) of a file.
+    FileSync(FileSyncJob),
 }
 
 impl Display for JobKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             JobKind::ShadowCopy(shadow_copy_job) => shadow_copy_job.fmt(f),
+            JobKind::FileSync(file_sync_job) => file_sync_job.fmt(f),
         }
     }
 }
@@ -99,6 +105,7 @@ impl JobKind {
     fn execute(&mut self) {
         match self {
             JobKind::ShadowCopy(shadow_copy_job) => shadow_copy_job.execute(),
+            JobKind::FileSync(file_sync_job) => file_sync_job.execute(),
         }
     }
 }
