@@ -97,7 +97,7 @@ impl JobEngine {
         assert!(job.is_pending());
         let mut job_lock = self.jobs.lock().unwrap();
         info!(
-            "{} added, there are now {} jobs in the queue",
+            "Added {}, there are now {} jobs in the queue",
             job,
             job_lock.len() + 1
         );

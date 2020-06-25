@@ -168,7 +168,7 @@ impl Job {
 
     #[stime]
     pub fn execute(&mut self) {
-        info!("Executing: {}", self);
+        info!("Executing {}", self);
         self.status.begin_execution();
         self.kind.execute();
         self.status.complete_execution(CompletionStatus::Ok);

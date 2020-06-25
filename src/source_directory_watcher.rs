@@ -2,7 +2,7 @@ use log::{debug, info};
 use std::{
     path::{PathBuf, MAIN_SEPARATOR},
     sync::mpsc::Sender,
-    thread,
+    thread, collections::HashMap,
 };
 use watchexec::cli::ArgsBuilder;
 use watchexec::{pathop::PathOp, Args, Handler};
@@ -105,24 +105,46 @@ impl Handler for FileEventHandler {
     /// then we have the opportunity to coalesce them, as long as the above semantics are
     /// maintained.
     fn on_update(&self, ops: &[watchexec::pathop::PathOp]) -> watchexec::error::Result<bool> {
-        debug!(">>> ON_UPDATE There are {} operations", ops.len());
-
-        for op in ops {
-            if op.op.is_none() {
-                continue;
-            }
-
+        // Utility function to actually send the appropriate event.
+        fn send_event(me: &FileEventHandler, op: &watchexec::pathop::PathOp) {
             let op_type = op.op.unwrap();
             if PathOp::is_remove(op_type) {
                 let event = FileSyncEvent::Remove(op.path.clone());
-                self.sender.send(event).unwrap();
+                me.sender.send(event).unwrap();
             } else if PathOp::is_create(op_type)
                 || PathOp::is_rename(op_type)
                 || PathOp::is_write(op_type)
             {
                 let event = FileSyncEvent::Update(op.path.clone());
-                self.sender.send(event).unwrap();
+                me.sender.send(event).unwrap();
             }
+        }
+
+        // Common case we can avoid allocating a HashMap.
+        if ops.len() == 1 {
+            if !ops[0].op.is_none() {
+                send_event(self, &ops[0]);
+            }
+
+            return Ok(true);
+        }
+
+        // If multiple events, take the last event for each distinct path.
+        let mut map = HashMap::new();
+        for op in ops {
+            if op.op.is_none() {
+                continue;
+            }
+
+            map.insert(op.path.clone(), op);
+        }
+
+        if ops.len() != map.len() {
+            info!("Received {} file operations, simplified to {} events", ops.len(), map.len());
+        }
+
+        for kvp in map {
+            send_event(self, kvp.1)
         }
 
         Ok(true)

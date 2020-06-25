@@ -54,7 +54,7 @@ impl ShadowCopyDestination {
 
         let sub_path = self.get_source_sub_path(file);
         let dest_path = self.get_dest_path(sub_path);
-        Self::copy_starting_message(file, &dest_path);
+        //Self::copy_starting_message(file, &dest_path);
 
         match std::fs::copy(file, &dest_path) {
             Ok(_) => Self::copy_succeeded_message(file, &dest_path),
@@ -84,19 +84,19 @@ impl ShadowCopyDestination {
     }
 
     fn copy_succeeded_message(source: &Path, destination: &Path) {
-        info!("Copied   {} to {}", source.display(), destination.display());
+        info!("Copied {} to {}", source.display(), destination.display());
     }
 
     fn remove_succeeded_message(destination: &Path) {
-        info!("Removed  {}", destination.display());
+        info!("Removed {}", destination.display());
     }
 
     fn remove_failed_message(destination: &Path, err: &std::io::Error) {
-        info!("REMOVEFAIL  {}, err = {}", destination.display(), err);
+        info!("REMOVEFAIL {}, err = {}", destination.display(), err);
     }
 
     fn copy_starting_message(source: &Path, destination: &Path) {
-        info!("Copying  {} to {}", source.display(), destination.display());
+        info!("Copying {} to {}", source.display(), destination.display());
     }
 
     fn copy_error_message(source: &Path, destination: &Path, err: &std::io::Error) {
@@ -123,6 +123,9 @@ impl ShadowCopyDestination {
 
     fn create_parent_dir(file: &Path) {
         let parent_dir = file.parent().unwrap();
-        std::fs::create_dir_all(parent_dir);
+        match std::fs::create_dir_all(parent_dir) {
+            Ok(_) => info!("Created parent directory {}", parent_dir.display()),
+            Err(err) => error!("Error creating parent directory {}, err = {}", parent_dir.display(), err),
+        }
     }
 }
