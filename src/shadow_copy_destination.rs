@@ -1,5 +1,6 @@
 use crate::configuration::DestinationType;
 use log::{error, info};
+use remove_dir_all::remove_dir_all;
 use std::path::{Path, PathBuf};
 
 /// The temporary directory where we make the shadow copy and do the
@@ -74,7 +75,7 @@ impl ShadowCopyDestination {
         let dest_path = self.get_path_in_destination(source_path);
 
         if std::path::Path::is_dir(&dest_path) {
-            match std::fs::remove_dir_all(&dest_path) {
+            match remove_dir_all(&dest_path) {
                 Ok(_) => info!("Removed destination directory {}", dest_path.display()),
                 Err(err) => error!(
                     "Error removing destination directory {}, err = {}",
