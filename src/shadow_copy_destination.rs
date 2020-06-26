@@ -74,7 +74,7 @@ impl ShadowCopyDestination {
 
         let dest_path = self.get_path_in_destination(source_path);
 
-        if std::path::Path::is_dir(&dest_path) {
+        if Path::is_dir(&dest_path) {
             match remove_dir_all(&dest_path) {
                 Ok(_) => info!("Removed destination directory {}", dest_path.display()),
                 Err(err) => error!(
@@ -89,6 +89,17 @@ impl ShadowCopyDestination {
                 Err(err) => Self::remove_failed_message(&dest_path, &err),
             }
         }
+    }
+
+    /// Given a `source_directory`, creates the corresponding directory
+    /// in the destination.
+    pub fn create_directory(&self, source_directory: &Path) {
+        if self.destination_directory.is_none() {
+            return;
+        }
+
+        let dest_dir = self.get_path_in_destination(source_directory);
+        Self::create_destination_dir(&dest_dir);
     }
 
     /// Converts a source path into a corresponding path in the destination directory.
@@ -148,16 +159,5 @@ impl ShadowCopyDestination {
                 err
             ),
         }
-    }
-
-    /// Given a `source_directory`, creates the corresponding directory
-    /// in the destination.
-    pub fn create_directory(&self, source_directory: &Path) {
-        if self.destination_directory.is_none() {
-            return;
-        }
-
-        let dest_dir = self.get_path_in_destination(source_directory);
-        Self::create_destination_dir(&dest_dir);
     }
 }
