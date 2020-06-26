@@ -91,17 +91,6 @@ impl ShadowCopyDestination {
         }
     }
 
-    /// Given a `source_directory`, creates the corresponding directory
-    /// in the destination.
-    pub fn create_directory(&self, source_directory: &Path) {
-        if self.destination_directory.is_none() {
-            return;
-        }
-
-        let dest_dir = self.get_path_in_destination(source_directory);
-        Self::create_destination_dir(&dest_dir);
-    }
-
     /// Converts a source path into a corresponding path in the destination directory.
     fn get_path_in_destination(&self, source_path: &Path) -> PathBuf {
         let source_sub_path = self.get_source_sub_path(source_path);
@@ -121,10 +110,6 @@ impl ShadowCopyDestination {
 
     fn remove_failed_message(destination: &Path, err: &std::io::Error) {
         info!("REMOVEFAIL {}, err = {}", destination.display(), err);
-    }
-
-    fn copy_starting_message(source: &Path, destination: &Path) {
-        info!("Copying {} to {}", source.display(), destination.display());
     }
 
     fn copy_error_message(source: &Path, destination: &Path, err: &std::io::Error) {
