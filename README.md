@@ -48,15 +48,13 @@ A testing GUI for Rust.
   - [ ] Config: concept of 'destination' which can be on another machine (build server) or local
         Tests are run in the destination dir. Initially, destination can be the same as the source
         and shadow copy can be a no-op
-  - [ ] Minimal copy on local disk
-  - [ ] Directory watcher, need to determine changed files
-        https://github.com/watchexec/watchexec - This is used by Cargo-Watch.
-        Cargo watch has some interesting ideas about debouncing, args, polling.
-        Should trigger further work (e.g. sync, build, test) by placing items into the execution queue.
-        Look for files with changed time or size.
+  - [X] Minimal copy on local disk
+  - [X] Directory watcher, need to determine changed files
+  - [ ] Should trigger further work (e.g. sync, build, test) by placing items into the execution queue.
   - [ ] Config: Things to ignore (default to .gitignore)
   - [ ] Config: Things to include especially
   - [ ] Config: Ability to poll every N seconds instead of file watching
+  - [ ] Better handling of errors in shadw_copy_destination.rs.
 
 - [ ] Build engine
   - [ ] Config: Compile in Debug mode by default
@@ -75,7 +73,7 @@ A testing GUI for Rust.
 - [ ] The execution Queue
   - [ ] Define the types of things that can be put in the queue (sync, build, analyze, run tests)
   - [ ] Emission of events so progress can be monitored?
-  - [ ] Ability to pause and clear the queue
+  - [X] Ability to pause and clear the queue
   - [ ] "Start again" feature: recreate a new shadow copy
 
 - [ ] Configuration system
