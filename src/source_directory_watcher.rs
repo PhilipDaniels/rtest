@@ -1,4 +1,4 @@
-use log::{debug, info};
+use log::info;
 use std::{
     collections::{hash_map::Entry, HashMap},
     path::{PathBuf, MAIN_SEPARATOR},
@@ -71,7 +71,7 @@ where
         .paths(vec![path.into()])
         .ignores(list)
         .run_initially(false) // turns off the on_manual event.
-        .debounce(1000_u64)
+        .debounce(500_u64)
         .build()
         .expect("Construction of Args failed")
 }
@@ -81,6 +81,12 @@ where
 struct FileEventHandler {
     args: Args,
     sender: Sender<FileSyncEvent>,
+}
+
+impl FileEventHandler {
+    fn new(args: Args, sender: Sender<FileSyncEvent>) -> Self {
+        Self { args, sender }
+    }
 }
 
 /// High-level events that reflect the changes that are happening within the
@@ -191,11 +197,5 @@ impl Handler for FileEventHandler {
     /// `watchexec` calls this once to get the args.
     fn args(&self) -> Args {
         self.args.clone()
-    }
-}
-
-impl FileEventHandler {
-    fn new(args: Args, sender: Sender<FileSyncEvent>) -> Self {
-        Self { args, sender }
     }
 }
