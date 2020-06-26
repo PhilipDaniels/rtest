@@ -16,7 +16,6 @@ impl Display for FileSyncJob {
         let (s, pathbuf) = match &self.file_sync_event {
             FileSyncEvent::FileUpdate(pb) => ("created/updated file", pb),
             FileSyncEvent::Remove(pb) => ("deleted file or directory", pb),
-            FileSyncEvent::DirectoryCreate(pb) => ("created directory", pb),
         };
 
         write!(f, "FileSync - {} {:?}", s, pathbuf)
@@ -52,11 +51,6 @@ impl FileSyncJob {
             }
             FileSyncEvent::Remove(path) => {
                 self.destination.remove_file_or_directory(path);
-            }
-            FileSyncEvent::DirectoryCreate(path) => {
-                if std::path::Path::is_dir(path) {
-                    self.destination.create_directory(path);
-                }
             }
         }
     }
