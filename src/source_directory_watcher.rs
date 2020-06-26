@@ -1,8 +1,9 @@
 use log::{debug, info};
 use std::{
+    collections::{hash_map::Entry, HashMap},
     path::{PathBuf, MAIN_SEPARATOR},
     sync::mpsc::Sender,
-    thread, collections::HashMap,
+    thread,
 };
 use watchexec::cli::ArgsBuilder;
 use watchexec::{pathop::PathOp, Args, Handler};
@@ -108,7 +109,7 @@ impl Handler for FileEventHandler {
     /// directory.
     ///
     /// Note that we don't care about directory creation events, since copying a file to the destination
-    /// will create all needed files.
+    /// will create all needed parent directories.
     fn on_update(&self, ops: &[watchexec::pathop::PathOp]) -> watchexec::error::Result<bool> {
         // Utility function to actually send the appropriate event.
         fn send_event(me: &FileEventHandler, op: &watchexec::pathop::PathOp) {
@@ -133,7 +134,7 @@ impl Handler for FileEventHandler {
 
         // Common case we can avoid allocating a HashMap.
         if ops.len() == 1 {
-            if !ops[0].op.is_none() {
+            if ops[0].op.is_some() {
                 send_event(self, &ops[0]);
             }
 
@@ -141,21 +142,41 @@ impl Handler for FileEventHandler {
         }
 
         // If multiple events, take the last event for each distinct path.
-        let mut map = HashMap::new();
+        // Within that constraint, we are careful to issue events in the order
+        // that we receive them (hence the tuple).
+        let mut map = HashMap::<PathBuf, (usize, &PathOp)>::new();
         for op in ops {
             if op.op.is_none() {
                 continue;
             }
 
-            map.insert(op.path.clone(), op);
+            let len = map.len();
+            match map.entry(op.path.clone()) {
+                Entry::Occupied(mut occupied) => {
+                    occupied.get_mut().1 = op;
+                }
+                Entry::Vacant(vacant) => {
+                    vacant.insert((len, op));
+                }
+            }
         }
 
         if ops.len() != map.len() {
-            info!("Received {} file operations, simplified to {} events", ops.len(), map.len());
+            info!(
+                "Received {} file operations, simplified to {} events",
+                ops.len(),
+                map.len()
+            );
         }
 
-        for kvp in map {
-            send_event(self, kvp.1)
+        let mut events: Vec<_> = map.iter().map(|(pb, (ord, op))| (*ord, pb, *op)).collect();
+
+        // Sort by the first field of the tuple, the ord, which was originally map.len() above.
+        // This gives us the events in the order they were sent to us.
+        events.sort_by_key(|tpl| tpl.0);
+
+        for (_ord, _pb, op) in events {
+            send_event(self, op)
         }
 
         Ok(true)
