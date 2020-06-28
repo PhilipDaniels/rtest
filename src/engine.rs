@@ -7,10 +7,12 @@ use std::thread::{self, JoinHandle};
 pub struct JobEngine {
     pending_jobs: Arc<Mutex<VecDeque<Job>>>,
     completed_jobs: Arc<Mutex<VecDeque<Job>>>,
-    job_signal: Arc<Condvar>,
+    pending_job_condvar: Arc<Condvar>,
+
+    pause_queue_manager_flag: Arc<Mutex<bool>>,
+    pause_queue_manager_condvar: Arc<Condvar>,
+
     queue_manager_join_handle: Option<JoinHandle<()>>,
-    pause_flag: Arc<Mutex<bool>>,
-    pause_signal: Arc<Condvar>,
 }
 
 
@@ -22,10 +24,10 @@ impl JobEngine {
         Self {
             pending_jobs: Arc::new(Mutex::new(VecDeque::new())),
             completed_jobs: Arc::new(Mutex::new(VecDeque::new())),
-            job_signal: Arc::new(Condvar::new()),
+            pending_job_condvar: Arc::new(Condvar::new()),
             queue_manager_join_handle: None,
-            pause_flag: Arc::new(Mutex::new(false)),
-            pause_signal: Arc::new(Condvar::new()),
+            pause_queue_manager_flag: Arc::new(Mutex::new(false)),
+            pause_queue_manager_condvar: Arc::new(Condvar::new()),
         }
     }
 
@@ -44,9 +46,9 @@ impl JobEngine {
         const QUEUE_MGR_THREAD_NAME: &str = "QUEUE_MGR";
 
         let jobs = self.pending_jobs.clone();
-        let job_signal = self.job_signal.clone();
-        let pause_flag = self.pause_flag.clone();
-        let pause_signal = self.pause_signal.clone();
+        let pending_job_condvar = self.pending_job_condvar.clone();
+        let pause_queue_manager_flag = self.pause_queue_manager_flag.clone();
+        let pause_queue_manager_condvar = self.pause_queue_manager_condvar.clone();
         let builder = thread::Builder::new().name(QUEUE_MGR_THREAD_NAME.into());
 
         self.queue_manager_join_handle = Some(builder
@@ -57,10 +59,10 @@ impl JobEngine {
                         // Wait for pause_flag to go `false`. Do this by waiting using the Condvar,
                         // this means we are not using CPU cycles. The extra scope is
                         // so that the `pause_flag_guard` gets dropped and the lock released.
-                        let mut pause_flag_guard = pause_flag.lock().unwrap();
+                        let mut pause_flag_guard = pause_queue_manager_flag.lock().unwrap();
                         while *pause_flag_guard {
                             info!("{}: Pausing thread", QUEUE_MGR_THREAD_NAME);
-                            pause_flag_guard = pause_signal.wait(pause_flag_guard).unwrap();
+                            pause_flag_guard = pause_queue_manager_condvar.wait(pause_flag_guard).unwrap();
                         }
                     }
 
@@ -78,7 +80,7 @@ impl JobEngine {
                             // Here we just wait for work to become available. We don't care about the
                             // return value of `wait`, because we will re-get `jobs_guard` above,
                             // when we come round the loop again.
-                            let _ = job_signal.wait(jobs_guard).unwrap();
+                            let _ = pending_job_condvar.wait(jobs_guard).unwrap();
                         }
                     }
                 }
@@ -90,16 +92,16 @@ impl JobEngine {
 
     pub fn pause(&mut self) {
         info!("Pausing JobWorker thread");
-        let mut pause_flag = self.pause_flag.lock().unwrap();
+        let mut pause_flag = self.pause_queue_manager_flag.lock().unwrap();
         *pause_flag = true;
-        self.pause_signal.notify_all();
+        self.pause_queue_manager_condvar.notify_all();
     }
 
     pub fn restart(&mut self) {
         info!("Restarting JobWorker thread");
-        let mut pause_flag = self.pause_flag.lock().unwrap();
+        let mut pause_flag = self.pause_queue_manager_flag.lock().unwrap();
         *pause_flag = false;
-        self.pause_signal.notify_all();
+        self.pause_queue_manager_condvar.notify_all();
     }
 
     pub fn add_job(&self, job: Job) {
@@ -114,7 +116,7 @@ impl JobEngine {
 
         // Tell everybody listening (really it's just us with one thread) that there is now
         // a job in the pending queue.
-        self.job_signal.notify_all();
+        self.pending_job_condvar.notify_all();
     }
 
     pub fn num_pending(&self) -> usize {
