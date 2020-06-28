@@ -5,9 +5,9 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
 
 pub struct JobEngine {
-    jobs: Arc<Mutex<VecDeque<Job>>>,
+    pending_jobs: Arc<Mutex<VecDeque<Job>>>,
     job_signal: Arc<Condvar>,
-    worker: Option<JoinHandle<()>>,
+    queue_manager_join_handle: Option<JoinHandle<()>>,
     pause_flag: Arc<Mutex<bool>>,
     pause_signal: Arc<Condvar>,
 }
@@ -16,27 +16,27 @@ pub struct JobEngine {
 impl JobEngine {
     pub fn new() -> Self {
         Self {
-            jobs: Arc::new(Mutex::new(VecDeque::new())),
+            pending_jobs: Arc::new(Mutex::new(VecDeque::new())),
             job_signal: Arc::new(Condvar::new()),
-            worker: None,
+            queue_manager_join_handle: None,
             pause_flag: Arc::new(Mutex::new(false)),
             pause_signal: Arc::new(Condvar::new()),
         }
     }
 
     pub fn start(&mut self) {
-        // If there is a worker, we're already started.
-        if self.worker.is_some() {
+        // If there is a queue manager, we're already started.
+        if self.queue_manager_join_handle.is_some() {
             return;
         }
 
         info!("Starting job engine");
 
-        let jobs = self.jobs.clone();
+        let jobs = self.pending_jobs.clone();
         let job_signal = self.job_signal.clone();
         let pause_flag = self.pause_flag.clone();
         let pause_signal = self.pause_signal.clone();
-        let builder = thread::Builder::new().name("JobWorker".into());
+        let builder = thread::Builder::new().name("QUEUE_MGR".into());
 
         let join_handle = builder
             .spawn(move || {
@@ -76,7 +76,7 @@ impl JobEngine {
 
         info!("Successfully spawned JobWorker thread");
 
-        self.worker = Some(join_handle);
+        self.queue_manager_join_handle = Some(join_handle);
     }
 
     pub fn pause(&mut self) {
@@ -95,7 +95,7 @@ impl JobEngine {
 
     pub fn add_job(&self, job: Job) {
         assert!(job.is_pending());
-        let mut job_lock = self.jobs.lock().unwrap();
+        let mut job_lock = self.pending_jobs.lock().unwrap();
         info!(
             "Added {}, there are now {} jobs in the queue",
             job,
@@ -109,12 +109,12 @@ impl JobEngine {
     }
 
     pub fn num_pending(&self) -> usize {
-        let job_lock = self.jobs.lock().unwrap();
+        let job_lock = self.pending_jobs.lock().unwrap();
         job_lock.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        let job_lock = self.jobs.lock().unwrap();
+        let job_lock = self.pending_jobs.lock().unwrap();
         job_lock.is_empty()
     }
 }
