@@ -13,6 +13,7 @@ mod jobs;
 mod shadow_copy_destination;
 mod source_directory_watcher;
 mod ui;
+mod utils;
 
 use engine::JobEngine;
 use jobs::{BuildJob, BuildMode, FileSyncJob, ShadowCopyJob};

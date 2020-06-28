@@ -7,6 +7,7 @@ use std::{
 };
 use watchexec::cli::ArgsBuilder;
 use watchexec::{pathop::PathOp, Args, Handler};
+use crate::utils::plural_s;
 
 /// Start a 'cargo-watch-like' watch process on `path` (which will be the source directory).
 /// The watch ignores everything that `.gitignore` would ignore, so that only changes relating
@@ -168,10 +169,13 @@ impl Handler for FileEventHandler {
         }
 
         if ops.len() != map.len() {
+            let plural_s = plural_s(map.len());
+
             info!(
-                "Received {} file operations, simplified to {} events",
+                "Received {} file operations, simplified to {} event{}",
                 ops.len(),
-                map.len()
+                map.len(),
+                plural_s
             );
         }
 
