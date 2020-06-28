@@ -1,6 +1,9 @@
+mod build;
 mod file_sync;
+mod process;
 mod shadow_copy;
 
+pub use build::{BuildJob, BuildMode};
 pub use file_sync::FileSyncJob;
 pub use shadow_copy::ShadowCopyJob;
 
@@ -83,13 +86,15 @@ impl JobStatus {
 }
 
 /// The `JobKind` specifies what type of job it is and the supporting data needed for that job.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum JobKind {
     /// Perform a shadow copy from the first directory (the source) to
     /// the second directory (the destination)
     ShadowCopy(ShadowCopyJob),
     /// Perform a file sync (copy or delete) of a file.
     FileSync(FileSyncJob),
+    /// Perform a build of the destination directory.
+    Build(BuildJob),
 }
 
 impl Display for JobKind {
@@ -97,6 +102,7 @@ impl Display for JobKind {
         match self {
             JobKind::ShadowCopy(shadow_copy_job) => shadow_copy_job.fmt(f),
             JobKind::FileSync(file_sync_job) => file_sync_job.fmt(f),
+            JobKind::Build(build_job) => build_job.fmt(f),
         }
     }
 }
@@ -106,13 +112,15 @@ impl JobKind {
         match self {
             JobKind::ShadowCopy(shadow_copy_job) => shadow_copy_job.execute(),
             JobKind::FileSync(file_sync_job) => file_sync_job.execute(),
+            JobKind::Build(build_job) => build_job.execute(),
         }
     }
 }
 
 /// Every Job has a unique id.
-/// The requirement for uniqueness means that this type cannot be cloned.
-#[derive(Debug)]
+/// Note that cloning theoretically creates a duplicate Id. In practice, this is only done
+/// inside the engine when it is executing the job so it's safe.
+#[derive(Debug, Clone)]
 pub struct JobId {
     id: usize,
 }
@@ -135,7 +143,7 @@ impl JobId {
 
 /// A Job is a short-lived unit of work that can be executed by the `JobEngine`.
 /// n.b. All jobs have a unique identifier, which means they cannot be copied or cloned.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Job {
     id: JobId,
     status: JobStatus,

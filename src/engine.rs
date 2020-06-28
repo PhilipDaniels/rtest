@@ -129,16 +129,6 @@ We need the following
 * We need to support cancellation of jobs.
 * When a job finishes execution it may create N more jobs.
 
-Immediately create a watcher on the directory
-Create shadow copy job and run it
-Perform shadow copy
-    Watcher events become new jobs that will execute after the shadow copy has finished
-    All we care about are file-delete/update/create events
-    We need to process them through .gitignore though
-
-Some more concepts we have
-    - Where the .gitignore files are and how to use them
-
 Alternative data structure
     - We maintain a list of jobs in a Vec but do not process in that Vec
     - A thread pulls jobs off and clones them, then executes them separately,
@@ -150,4 +140,24 @@ If a build is running, stop it
 If OP is REMOVE, remove all file copy jobs and create a remove job
 ELSE
     if there is a previous job for this file, remove it and insert a new COPY job (op is likely to be WRITE, CLOSE_WRITE, RENAME or CHMOD)
+
+
+Flag for 'is a build required'?
+
+While a job is executing, no other jobs are added to the queue. We need
+to spawn a new thread to execute build jobs and test jobs.
+
+
+
+THE LIST OF JOBS
+  A QUEUE_MGR thread
+    -- adds new jobs to the queue from the channel
+    -- watches for PAUSE ENGINE command
+    -- waits for jobs to execute and hands them off to the JOB_EXECUTOR thread
+        to actually run (so as not to block this thread)
+
+Jobs are removed from the queue after processing whether they failed or not
+Move them to a DONE JOBS queue, along with their status and any output
+
+
 */

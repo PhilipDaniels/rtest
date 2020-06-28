@@ -2,7 +2,10 @@ use chrono::{DateTime, Utc};
 use druid::{AppLauncher, LocalizedString, WindowDesc};
 use env_logger::Builder;
 use log::info;
-use std::{io::Write, sync::{Arc, mpsc::channel, Mutex}};
+use std::{
+    io::Write,
+    sync::{mpsc::channel, Arc, Mutex},
+};
 
 mod configuration;
 mod engine;
@@ -12,7 +15,7 @@ mod source_directory_watcher;
 mod ui;
 
 use engine::JobEngine;
-use jobs::{FileSyncJob, ShadowCopyJob};
+use jobs::{BuildJob, BuildMode, FileSyncJob, ShadowCopyJob};
 use shadow_copy_destination::ShadowCopyDestination;
 use source_directory_watcher::FileSyncEvent;
 use ui::build_main_window;
@@ -42,6 +45,8 @@ fn main() {
     if dest_dir.is_copying() {
         // Perform an initial full shadow copy.
         let job = ShadowCopyJob::new(dest_dir.clone());
+        engine_lock.add_job(job);
+        let job = BuildJob::new(dest_dir.clone(), BuildMode::Debug);
         engine_lock.add_job(job);
 
         // Then watch for incremental file changes. Use another thread to
