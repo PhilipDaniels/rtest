@@ -6,17 +6,22 @@ use std::thread::{self, JoinHandle};
 
 pub struct JobEngine {
     pending_jobs: Arc<Mutex<VecDeque<Job>>>,
+    completed_jobs: Arc<Mutex<VecDeque<Job>>>,
     job_signal: Arc<Condvar>,
     queue_manager_join_handle: Option<JoinHandle<()>>,
     pause_flag: Arc<Mutex<bool>>,
     pause_signal: Arc<Condvar>,
 }
 
+
+const JOB_EXECUTOR_THREAD_NAME: &str = "JOB_EXECUTOR";
+
 /// Based on https://www.poor.dev/posts/what-job-queue/.
 impl JobEngine {
     pub fn new() -> Self {
         Self {
             pending_jobs: Arc::new(Mutex::new(VecDeque::new())),
+            completed_jobs: Arc::new(Mutex::new(VecDeque::new())),
             job_signal: Arc::new(Condvar::new()),
             queue_manager_join_handle: None,
             pause_flag: Arc::new(Mutex::new(false)),
@@ -32,13 +37,19 @@ impl JobEngine {
 
         info!("Starting job engine");
 
+        self.create_queue_mgr_thread();
+    }
+
+    fn create_queue_mgr_thread(&mut self) {
+        const QUEUE_MGR_THREAD_NAME: &str = "QUEUE_MGR";
+
         let jobs = self.pending_jobs.clone();
         let job_signal = self.job_signal.clone();
         let pause_flag = self.pause_flag.clone();
         let pause_signal = self.pause_signal.clone();
-        let builder = thread::Builder::new().name("QUEUE_MGR".into());
+        let builder = thread::Builder::new().name(QUEUE_MGR_THREAD_NAME.into());
 
-        let join_handle = builder
+        self.queue_manager_join_handle = Some(builder
             .spawn(move || {
                 // The loop makes this thread run forever.
                 loop {
@@ -48,7 +59,7 @@ impl JobEngine {
                         // so that the `pause_flag_guard` gets dropped and the lock released.
                         let mut pause_flag_guard = pause_flag.lock().unwrap();
                         while *pause_flag_guard {
-                            info!("Pausing JobWorker thread inside itself");
+                            info!("{}: Pausing thread", QUEUE_MGR_THREAD_NAME);
                             pause_flag_guard = pause_signal.wait(pause_flag_guard).unwrap();
                         }
                     }
@@ -63,7 +74,7 @@ impl JobEngine {
                     {
                         Some(next_job) => next_job.execute(),
                         None => {
-                            info!("All jobs processed, sleeping");
+                            info!("{}: All jobs processed, sleeping", QUEUE_MGR_THREAD_NAME);
                             // Here we just wait for work to become available. We don't care about the
                             // return value of `wait`, because we will re-get `jobs_guard` above,
                             // when we come round the loop again.
@@ -72,11 +83,9 @@ impl JobEngine {
                     }
                 }
             })
-            .expect("Expected to create the JobWorker thread");
+            .expect(&format!("{} Failed to create the thread", QUEUE_MGR_THREAD_NAME)));
 
-        info!("Successfully spawned JobWorker thread");
-
-        self.queue_manager_join_handle = Some(join_handle);
+        info!("{}: Successfully spawned the thread", QUEUE_MGR_THREAD_NAME);
     }
 
     pub fn pause(&mut self) {
