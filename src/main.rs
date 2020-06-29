@@ -12,6 +12,7 @@ mod engine;
 mod jobs;
 mod shadow_copy_destination;
 mod source_directory_watcher;
+mod thread_clutch;
 mod ui;
 mod utils;
 
