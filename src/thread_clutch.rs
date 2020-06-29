@@ -31,12 +31,12 @@ impl ThreadClutch {
 
     /// Pauses all threads that are controlled by this `ThreadClutch`.
     pub fn pause_threads(&self) {
-        self.inner.pause_thread();
+        self.inner.pause_threads();
     }
 
     /// Releases all threads that are controlled by this `ThreadClutch`.
     pub fn release_threads(&self) {
-        self.inner.release_thread();
+        self.inner.release_threads();
     }
 
     /// Waits for the thread to be allowed to run. Call this from one or more
@@ -79,12 +79,12 @@ impl ThreadClutchInner {
         }
     }
 
-    pub fn pause_thread(&self) {
+    pub fn pause_threads(&self) {
         let mut paused = self.paused.lock().unwrap();
         *paused = true;
     }
 
-    pub fn release_thread(&self) {
+    pub fn release_threads(&self) {
         let mut paused = self.paused.lock().unwrap();
         *paused = false;
         self.condvar.notify_all();
@@ -102,6 +102,6 @@ impl ThreadClutchInner {
     }
 
     pub fn is_running(&self) -> bool {
-        !*self.paused.lock().unwrap()
+        !self.is_paused()
     }
 }
