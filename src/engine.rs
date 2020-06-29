@@ -197,7 +197,7 @@ impl JobEngineInner2 {
 
     fn create_job_starter_thread(
         job_starter_clutch: ThreadClutch,
-        pending_jobs: JobList,
+        mut pending_jobs: JobList,
         job_exec_sender: Sender<Job>,
         signal: Arc<Condvar>,
     ) {
@@ -210,7 +210,7 @@ impl JobEngineInner2 {
                 loop {
                     job_starter_clutch.wait_for_release();
 
-                    if let Some(job) = Self::get_next_job(pending_jobs) {
+                    if let Some(job) = Self::get_next_job(&mut pending_jobs) {
                         job_exec_sender
                             .send(job)
                             .expect("Could not send job to JOB_EXECUTOR thread");
@@ -228,7 +228,17 @@ impl JobEngineInner2 {
             .expect("Cannot create JOB_STARTER thread");
     }
 
-    fn get_next_job(pending_jobs: JobList) -> Option<Job> {
+    fn get_next_job(pending_jobs: &mut JobList) -> Option<Job> {
+        let mut pending_jobs = pending_jobs.lock().unwrap();
+        for job in pending_jobs.iter_mut() {
+            if job.is_pending() {
+                // Mark the job while it remains in the queue, so that we
+                // skip over it the next time.
+                job.begin_execution();
+                return Some(job.clone());
+            }
+        }
+
         None
     }
 }
