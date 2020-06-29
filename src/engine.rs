@@ -53,7 +53,7 @@ struct JobEngineInner2 {
     // A sender channel for communicating with the JOB_EXECUTOR thread.
     // It needs to be wrapped in a mutex so that we can clone
     // engines and send them across threads.
-    job_exec_sender: Mutex<Sender<Job>>,
+    //job_exec_sender: Mutex<Sender<Job>>,
 
     // A channel to handle the addition of jobs to the queue.
     // The other end of this channel is monitored by the JOB_ADDER thread.
@@ -78,11 +78,19 @@ impl JobEngineInner2 {
             job_exec_receiver,
         );
 
+        let job_starter_clutch = ThreadClutch::default();
+        Self::create_job_starter_thread(
+            job_starter_clutch.clone(),
+            pending_jobs.clone(),
+            job_exec_sender,
+            job_adder_signal.clone(),
+        );
+
         Self {
             pending_jobs,
             completed_jobs,
-            job_starter_clutch: Default::default(),
-            job_exec_sender: Mutex::new(job_exec_sender),
+            job_starter_clutch,
+            //job_exec_sender: Mutex::new(job_exec_sender),
             job_adder_sender: Mutex::new(job_adder_sender),
             job_adder_signal,
         }
@@ -181,11 +189,47 @@ impl JobEngineInner2 {
                         );
 
                         completed_jobs.push_back(job);
-
                     }
                 }
             })
             .expect("Cannot create JOB_COMPLETED thread");
+    }
+
+    fn create_job_starter_thread(
+        job_starter_clutch: ThreadClutch,
+        pending_jobs: JobList,
+        job_exec_sender: Sender<Job>,
+        signal: Arc<Condvar>,
+    ) {
+        let builder = thread::Builder::new().name("JOB_STARTER".into());
+
+        let dummy_mutex = Mutex::new(());
+
+        builder
+            .spawn(move || {
+                loop {
+                    job_starter_clutch.wait_for_release();
+
+                    if let Some(job) = Self::get_next_job(pending_jobs) {
+                        job_exec_sender
+                            .send(job)
+                            .expect("Could not send job to JOB_EXECUTOR thread");
+                    } else {
+                        // No jobs exist, go to sleep waiting for a signal on the condition variable.
+                        // This will be signaled by `add_job`.
+
+                        // The idea here is that this will BLOCK and you are not allowed to touch the
+                        // data guarded by the MUTEX until the signal happens.
+                        let guard = dummy_mutex.lock().unwrap();
+                        let _ = signal.wait(guard).unwrap();
+                    }
+                }
+            })
+            .expect("Cannot create JOB_STARTER thread");
+    }
+
+    fn get_next_job(pending_jobs: JobList) -> Option<Job> {
+        None
     }
 }
 
@@ -277,11 +321,6 @@ We need the following
 * We need to support cancellation of jobs.
 * When a job finishes execution it may create N more jobs.
 
-Alternative data structure
-    - We maintain a list of jobs in a Vec but do not process in that Vec
-    - A thread pulls jobs off and clones them, then executes them separately,
-      perhaps using a channel.
-
 Algorithm for adding file sync
 FOR SOME PATH P
 If a build is running, stop it
@@ -289,23 +328,5 @@ If OP is REMOVE, remove all file copy jobs and create a remove job
 ELSE
     if there is a previous job for this file, remove it and insert a new COPY job (op is likely to be WRITE, CLOSE_WRITE, RENAME or CHMOD)
 
-
 Flag for 'is a build required'?
-
-While a job is executing, no other jobs are added to the queue. We need
-to spawn a new thread to execute build jobs and test jobs.
-
-
-
-THE LIST OF JOBS
-  A QUEUE_MGR thread
-    -- adds new jobs to the queue from the channel
-    -- watches for PAUSE ENGINE command
-    -- waits for jobs to execute and hands them off to the JOB_EXECUTOR thread
-        to actually run (so as not to block this thread)
-
-Jobs are removed from the queue after processing whether they failed or not
-Move them to a DONE JOBS queue, along with their status and any output
-
-
 */
