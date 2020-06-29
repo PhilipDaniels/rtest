@@ -9,27 +9,31 @@ use std::thread;
 
 #[derive(Debug, Clone)]
 pub struct JobEngine {
-    inner: Arc<JobEngineInner2>,
+    inner: Arc<JobEngineInner>,
 }
 
 impl JobEngine {
+    /// Creates a new job engine that is running and ready to process jobs.
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(JobEngineInner2::new()),
+            inner: Arc::new(JobEngineInner::new()),
         }
     }
-    pub fn start(&self) {
-        self.inner.start();
-    }
 
+    /// Pauses the job engine.
+    // This does not clear out the list of pending jobs, nor does it stop the
+    // currently executing job, if any. However, after that job has completed
+    // no new jobs will begin to execute.
     pub fn pause(&self) {
         self.inner.pause();
     }
 
+    /// Restarts the job engine after a pause.
     pub fn restart(&self) {
         self.inner.restart();
     }
 
+    /// Add a job to the end of the queue.
     pub fn add_job(&self, job: Job) {
         self.inner.add_job(job);
     }
@@ -38,9 +42,10 @@ impl JobEngine {
 type JobList = Arc<Mutex<VecDeque<Job>>>;
 
 #[derive(Debug)]
-struct JobEngineInner2 {
+struct JobEngineInner {
     // The list of pending (yet to be executed) jobs.
     pending_jobs: JobList,
+
     // The list of completed jobs.
     completed_jobs: JobList,
 
@@ -50,22 +55,20 @@ struct JobEngineInner2 {
     // add new jobs to the queue, because that is controlled by a different thread.
     job_starter_clutch: ThreadClutch,
 
-    // A channel to handle the addition of jobs to the queue.
-    // The other end of this channel is monitored by the JOB_ADDER thread.
-    job_adder_sender: Mutex<Sender<Job>>,
-    job_adder_signal: Arc<Condvar>,
+    // The `job_added_signal` is notified when a new job is added to the pending queue.
+    // This will cause the JOB_STARTER thread to wake up (it goes to sleep when
+    // there are no pending jobs).
+    job_added_signal: Arc<Condvar>,
 }
 
-impl JobEngineInner2 {
+impl JobEngineInner {
     pub fn new() -> Self {
         let (job_exec_sender, job_exec_receiver) = Self::create_job_executor_thread();
 
         let pending_jobs: JobList = Default::default();
         let completed_jobs: JobList = Default::default();
 
-        let job_adder_signal = Arc::new(Condvar::new());
-        let job_adder_sender =
-            Self::create_job_adder_thread(pending_jobs.clone(), job_adder_signal.clone());
+        let job_added_signal = Arc::new(Condvar::new());
 
         Self::create_job_completed_thread(
             pending_jobs.clone(),
@@ -78,19 +81,16 @@ impl JobEngineInner2 {
             job_starter_clutch.clone(),
             pending_jobs.clone(),
             job_exec_sender,
-            job_adder_signal.clone(),
+            job_added_signal.clone(),
         );
 
         Self {
             pending_jobs,
             completed_jobs,
             job_starter_clutch,
-            job_adder_sender: Mutex::new(job_adder_sender),
-            job_adder_signal,
+            job_added_signal: job_added_signal,
         }
     }
-
-    pub fn start(&self) {}
 
     pub fn pause(&self) {
         info!("JobEngine paused");
@@ -103,13 +103,27 @@ impl JobEngineInner2 {
     }
 
     pub fn add_job(&self, job: Job) {
-        let lock = self.job_adder_sender.lock().unwrap();
-        lock.send(job).expect("Could not send job to JOB_ADDER");
+        // This lock won't block the caller much, because all other locks
+        // on the `pending_jobs` are very short lived.
+        let mut lock = self.pending_jobs.lock().unwrap();
+
+        info!(
+            "Added {}, there are now {} jobs in the pending queue",
+            job,
+            lock.len() + 1
+        );
+
+        lock.push_back(job);
+
+        // Tell everybody listening (really it's just us with one thread) that there
+        // is now a job in the pending queue.
+        self.job_added_signal.notify_all();
     }
 
-    /// Create the JOB_EXECUTOR thread. This is the simplest thread, it just calls
-    /// `Job.execute`, one job at a time. It receives jobs on a channel, and sends
-    /// the results back on another channel.
+    /// Create the JOB_EXECUTOR thread. This thread just calls
+    /// `Job.execute()`, one job at a time. It receives jobs on a channel, and sends
+    /// the results back on another channel (where they are picked up by
+    /// the JOB_COMPLETED thread).
     fn create_job_executor_thread() -> (Sender<Job>, Receiver<Job>) {
         let (job_exec_sender, job_exec_internal_receiver) = channel::<Job>();
         let (job_exec_internal_sender, job_exec_receiver) = channel::<Job>();
@@ -131,33 +145,8 @@ impl JobEngineInner2 {
         (job_exec_sender, job_exec_receiver)
     }
 
-    fn create_job_adder_thread(pending_jobs: JobList, signal: Arc<Condvar>) -> Sender<Job> {
-        let (sender, receiver) = channel();
-
-        let builder = thread::Builder::new().name("JOB_ADDER".into());
-
-        builder
-            .spawn(move || {
-                for job in receiver {
-                    let mut lock = pending_jobs.lock().unwrap();
-                    info!(
-                        "Added {}, there are now {} jobs in the pending queue",
-                        job,
-                        lock.len() + 1
-                    );
-
-                    lock.push_back(job);
-
-                    // Tell everybody listening (really it's just us with one thread) that there
-                    // is now a job in the pending queue.
-                    signal.notify_all();
-                }
-            })
-            .expect("Cannot create JOB_ADDER thread");
-
-        sender
-    }
-
+    /// Create the JOB_COMPLETED thread. It is the job of this thread to listen
+    /// for completed job messages which are sent by the JOB_EXECUTOR thread.
     fn create_job_completed_thread(
         pending_jobs: JobList,
         completed_jobs: JobList,
@@ -192,6 +181,15 @@ impl JobEngineInner2 {
             .expect("Cannot create JOB_COMPLETED thread");
     }
 
+    /// Create the JOB_STARTER thread. This thread is responsible for checking the
+    /// `pending_jobs` queue to see if there are any jobs that need executing, and if
+    /// there are it clones them and sends them to the JOB_EXECUTOR thread.
+    /// If there are no pending jobs then it goes to sleep, until it is woken up by
+    /// `add_job` notifying the signal.
+    /// Q: Why not use a channel with a for loop like the other threads, since that would
+    /// allow us to dispense with the Condvar? A: We want the list of pending jobs to
+    /// be observable / iterable, so we must maintain our own queue, we can't use the
+    /// channels queue because iterating it consumes the items.
     fn create_job_starter_thread(
         job_starter_clutch: ThreadClutch,
         mut pending_jobs: JobList,

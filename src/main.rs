@@ -35,7 +35,6 @@ fn main() {
     info!("{:?}", config);
 
     let engine = JobEngine::new();
-    engine.start();
 
     // If a shadow copy operation is required, kick one off.
     // This & is important to ensure the temp dir gets dropped when we exit,
