@@ -41,6 +41,8 @@ type JobList = Arc<Mutex<VecDeque<Job>>>;
 struct JobEngineInner2 {
     // The list of pending (yet to be executed) jobs.
     pending_jobs: JobList,
+    // The list of completed jobs.
+    completed_jobs: JobList,
 
     // A clutch that allows us to pause and restart the JOB_STARTER thread.
     // This basically allows us to pause the entire job queue, because if we
@@ -48,11 +50,10 @@ struct JobEngineInner2 {
     // add new jobs to the queue, because that is controlled by a different thread.
     job_starter_clutch: ThreadClutch,
 
-    // A pair of channels for communicating with the JOB_EXECUTOR thread.
-    // The channels need to be wrapped in mutexes so that we can clone
+    // A sender channel for communicating with the JOB_EXECUTOR thread.
+    // It needs to be wrapped in a mutex so that we can clone
     // engines and send them across threads.
     job_exec_sender: Mutex<Sender<Job>>,
-    job_exec_receiver: Mutex<Receiver<Job>>,
 
     // A channel to handle the addition of jobs to the queue.
     // The other end of this channel is monitored by the JOB_ADDER thread.
@@ -65,16 +66,25 @@ impl JobEngineInner2 {
         let (job_exec_sender, job_exec_receiver) = Self::create_job_executor_thread();
 
         let pending_jobs: JobList = Default::default();
+        let completed_jobs: JobList = Default::default();
+
         let job_adder_signal = Arc::new(Condvar::new());
-        let job_adder_sender = Self::create_job_adder_thread(pending_jobs.clone(), job_adder_signal.clone());
+        let job_adder_sender =
+            Self::create_job_adder_thread(pending_jobs.clone(), job_adder_signal.clone());
+
+        Self::create_job_completed_thread(
+            pending_jobs.clone(),
+            completed_jobs.clone(),
+            job_exec_receiver,
+        );
 
         Self {
             pending_jobs,
+            completed_jobs,
             job_starter_clutch: Default::default(),
             job_exec_sender: Mutex::new(job_exec_sender),
-            job_exec_receiver: Mutex::new(job_exec_receiver),
             job_adder_sender: Mutex::new(job_adder_sender),
-            job_adder_signal
+            job_adder_signal,
         }
     }
 
@@ -135,12 +145,47 @@ impl JobEngineInner2 {
 
                     // Tell everybody listening (really it's just us with one thread) that there
                     // is now a job in the pending queue.
-                   signal.notify_all();
+                    signal.notify_all();
                 }
             })
             .expect("Cannot create JOB_ADDER thread");
 
         sender
+    }
+
+    fn create_job_completed_thread(
+        pending_jobs: JobList,
+        completed_jobs: JobList,
+        job_exec_receiver: Receiver<Job>,
+    ) {
+        let builder = thread::Builder::new().name("JOB_COMPLETED".into());
+
+        builder
+            .spawn(move || {
+                for job in job_exec_receiver {
+                    let mut pending_jobs = pending_jobs.lock().unwrap();
+                    // Find this job by id in the list of pending jobs. It may not be there, if we
+                    // 'tweaked' the job queue while this one was executing. But if we do
+                    // find it, then remove it and add it to the list of completed jobs.
+                    // If it's not found, just ignore it.
+                    if let Some(index) = pending_jobs.iter().position(|j| j.id() == job.id()) {
+                        pending_jobs.remove(index);
+
+                        let mut completed_jobs = completed_jobs.lock().unwrap();
+
+                        info!(
+                            "Completed {}, there are now {} pending and {} completed jobs",
+                            job,
+                            pending_jobs.len(),
+                            completed_jobs.len() + 1
+                        );
+
+                        completed_jobs.push_back(job);
+
+                    }
+                }
+            })
+            .expect("Cannot create JOB_COMPLETED thread");
     }
 }
 
@@ -218,41 +263,6 @@ impl JobEngineInner {
             ));
 
         info!("{}: Successfully spawned the thread", QUEUE_MGR_THREAD_NAME);
-    }
-
-    pub fn pause(&self) {
-        info!("Pausing JobWorker thread");
-        self.pause_queue_clutch.pause_threads();
-    }
-
-    pub fn restart(&self) {
-        info!("Restarting JobWorker thread");
-        self.pause_queue_clutch.release_threads();
-    }
-
-    pub fn add_job(&self, job: Job) {
-        assert!(job.is_pending());
-        let mut job_lock = self.pending_jobs.lock().unwrap();
-        info!(
-            "Added {}, there are now {} jobs in the queue",
-            job,
-            job_lock.len() + 1
-        );
-        job_lock.push_back(job);
-
-        // Tell everybody listening (really it's just us with one thread) that there is now
-        // a job in the pending queue.
-        self.pending_job_condvar.notify_all();
-    }
-
-    pub fn num_pending(&self) -> usize {
-        let job_lock = self.pending_jobs.lock().unwrap();
-        job_lock.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        let job_lock = self.pending_jobs.lock().unwrap();
-        job_lock.is_empty()
     }
 }
 

@@ -120,7 +120,7 @@ impl JobKind {
 /// Every Job has a unique id.
 /// Note that cloning theoretically creates a duplicate Id. In practice, this is only done
 /// inside the engine when it is executing the job so it's safe.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JobId {
     id: usize,
 }
