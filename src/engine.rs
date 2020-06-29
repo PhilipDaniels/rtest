@@ -1,39 +1,125 @@
-use crate::{thread_clutch::ThreadClutch, jobs::Job};
+use crate::{jobs::Job, thread_clutch::ThreadClutch};
 use log::info;
 use std::collections::VecDeque;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{
+    mpsc::{channel, Receiver, Sender},
+    Arc, Condvar, Mutex,
+};
 use std::thread::{self, JoinHandle};
 
+#[derive(Debug, Clone)]
 pub struct JobEngine {
+    inner: Arc<JobEngineInner2>,
+}
+
+impl JobEngine {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(JobEngineInner2::new()),
+        }
+    }
+    pub fn start(&self) {
+        self.inner.start();
+    }
+
+    pub fn pause(&self) {
+        self.inner.pause();
+    }
+
+    pub fn restart(&self) {
+        self.inner.restart();
+    }
+
+    pub fn add_job(&self, job: Job) {
+        self.inner.add_job(job);
+    }
+}
+
+#[derive(Debug)]
+struct JobEngineInner2 {
+    job_starter_clutch: ThreadClutch,
+    // A pair of channels for communicating with the JOB_EXECUTOR thread.
+    // The channels need to be wrapped in mutexes so that we can clone
+    // engines and send them across threads.
+    job_exec_sender: Mutex<Sender<Job>>,
+    job_exec_receiver: Mutex<Receiver<Job>>,
+}
+
+impl JobEngineInner2 {
+    pub fn new() -> Self {
+        let (job_exec_sender, job_exec_receiver) = Self::create_job_executor_thread();
+
+        Self {
+            job_starter_clutch: Default::default(),
+            job_exec_sender: Mutex::new(job_exec_sender),
+            job_exec_receiver: Mutex::new(job_exec_receiver),
+        }
+    }
+
+    pub fn start(&self) {}
+
+    pub fn pause(&self) {
+        self.job_starter_clutch.pause_threads();
+    }
+
+    pub fn restart(&self) {
+        self.job_starter_clutch.release_threads();
+    }
+
+    pub fn add_job(&self, job: Job) {}
+
+    /// Create the JOB_EXECUTOR thread. This is the simplest thread, it just calls
+    /// `Job.execute`, one job at a time. It receives jobs on a channel, and sends
+    /// the results back on another channel.
+    fn create_job_executor_thread() -> (Sender<Job>, Receiver<Job>) {
+        let (job_exec_sender, job_exec_internal_receiver) = channel::<Job>();
+        let (job_exec_internal_sender, job_exec_receiver) = channel::<Job>();
+
+        let builder = thread::Builder::new().name(JOB_EXECUTOR_THREAD_NAME.into());
+
+        builder
+            .spawn(move || {
+                for mut job in job_exec_internal_receiver {
+                    job.execute();
+                    job_exec_internal_sender
+                        .send(job)
+                        .expect("Cannot return job from JOB_EXECUTOR");
+                }
+            })
+            .expect("Cannot create JOB_EXECUTOR thread");
+
+        (job_exec_sender, job_exec_receiver)
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct JobEngineInner {
     pending_jobs: Arc<Mutex<VecDeque<Job>>>,
     completed_jobs: Arc<Mutex<VecDeque<Job>>>,
     pending_job_condvar: Arc<Condvar>,
-
     pause_queue_clutch: ThreadClutch,
-
-    queue_manager_join_handle: Option<JoinHandle<()>>,
+    //queue_manager_join_handle: Option<JoinHandle<()>>,
 }
-
 
 const JOB_EXECUTOR_THREAD_NAME: &str = "JOB_EXECUTOR";
 
 /// Based on https://www.poor.dev/posts/what-job-queue/.
-impl JobEngine {
+impl JobEngineInner {
     pub fn new() -> Self {
         Self {
             pending_jobs: Arc::new(Mutex::new(VecDeque::new())),
             completed_jobs: Arc::new(Mutex::new(VecDeque::new())),
             pending_job_condvar: Arc::new(Condvar::new()),
-            queue_manager_join_handle: None,
+            //queue_manager_join_handle: None,
             pause_queue_clutch: Default::default(),
         }
     }
 
     pub fn start(&mut self) {
         // If there is a queue manager, we're already started.
-        if self.queue_manager_join_handle.is_some() {
-            return;
-        }
+        // if self.queue_manager_join_handle.is_some() {
+        //     return;
+        // }
 
         info!("Starting job engine");
 
@@ -48,7 +134,8 @@ impl JobEngine {
         let clutch = self.pause_queue_clutch.clone();
         let builder = thread::Builder::new().name(QUEUE_MGR_THREAD_NAME.into());
 
-        self.queue_manager_join_handle = Some(builder
+        //self.queue_manager_join_handle =
+        builder
             .spawn(move || {
                 // The loop makes this thread run forever.
                 loop {
@@ -73,19 +160,22 @@ impl JobEngine {
                     }
                 }
             })
-            .expect(&format!("{} Failed to create the thread", QUEUE_MGR_THREAD_NAME)));
+            .expect(&format!(
+                "{} Failed to create the thread",
+                QUEUE_MGR_THREAD_NAME
+            ));
 
         info!("{}: Successfully spawned the thread", QUEUE_MGR_THREAD_NAME);
     }
 
     pub fn pause(&self) {
         info!("Pausing JobWorker thread");
-        self.pause_queue_clutch.pause_thread();
+        self.pause_queue_clutch.pause_threads();
     }
 
     pub fn restart(&self) {
         info!("Restarting JobWorker thread");
-        self.pause_queue_clutch.release_thread();
+        self.pause_queue_clutch.release_threads();
     }
 
     pub fn add_job(&self, job: Job) {
@@ -113,6 +203,7 @@ impl JobEngine {
         job_lock.is_empty()
     }
 }
+
 /*
 We need the following
 

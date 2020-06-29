@@ -34,9 +34,8 @@ fn main() {
     let config = configuration::new();
     info!("{:?}", config);
 
-    let engine = Arc::new(Mutex::new(JobEngine::new()));
-    let mut engine_lock = engine.lock().unwrap();
-    engine_lock.start();
+    let engine = JobEngine::new();
+    engine.start();
 
     // If a shadow copy operation is required, kick one off.
     // This & is important to ensure the temp dir gets dropped when we exit,
@@ -47,14 +46,14 @@ fn main() {
     if dest_dir.is_copying() {
         // Perform an initial full shadow copy.
         let job = ShadowCopyJob::new(dest_dir.clone());
-        engine_lock.add_job(job);
+        engine.add_job(job);
 
 
         // Test pause and restart.
-        ///std::thread::sleep(Duration::from_secs(5));
+        //std::thread::sleep(Duration::from_secs(5));
         //engine_lock.pause();
         let job = BuildJob::new(dest_dir.clone(), BuildMode::Debug);
-        engine_lock.add_job(job);
+        engine.add_job(job);
         //std::thread::sleep(Duration::from_secs(5));
         //engine_lock.restart();
 
@@ -65,14 +64,12 @@ fn main() {
         // add jobs to the engine.
         let (sender, receiver) = channel::<FileSyncEvent>();
         source_directory_watcher::start_watching(&config.source_directory, sender);
-        drop(engine_lock);
 
         let engine2 = engine.clone();
         std::thread::spawn(move || {
             for event in receiver {
                 let job = FileSyncJob::new(dest_dir.clone(), event);
-                let lock = engine2.lock().unwrap();
-                lock.add_job(job);
+                engine2.add_job(job);
             }
         });
     }

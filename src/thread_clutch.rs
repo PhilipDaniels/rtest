@@ -25,7 +25,7 @@ impl ThreadClutch {
     /// in the paused state.
     pub fn new_paused() -> Self {
         Self {
-            inner: ThreadClutchInner::new_paused();
+            inner: Arc::new(ThreadClutchInner::new_paused())
         }
     }
 
