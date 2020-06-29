@@ -1,4 +1,4 @@
-use crate::jobs::Job;
+use crate::{thread_clutch::ThreadClutch, jobs::Job};
 use log::info;
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
@@ -9,8 +9,7 @@ pub struct JobEngine {
     completed_jobs: Arc<Mutex<VecDeque<Job>>>,
     pending_job_condvar: Arc<Condvar>,
 
-    pause_queue_manager_flag: Arc<Mutex<bool>>,
-    pause_queue_manager_condvar: Arc<Condvar>,
+    pause_queue_clutch: ThreadClutch,
 
     queue_manager_join_handle: Option<JoinHandle<()>>,
 }
@@ -26,8 +25,7 @@ impl JobEngine {
             completed_jobs: Arc::new(Mutex::new(VecDeque::new())),
             pending_job_condvar: Arc::new(Condvar::new()),
             queue_manager_join_handle: None,
-            pause_queue_manager_flag: Arc::new(Mutex::new(false)),
-            pause_queue_manager_condvar: Arc::new(Condvar::new()),
+            pause_queue_clutch: Default::default(),
         }
     }
 
@@ -47,24 +45,14 @@ impl JobEngine {
 
         let jobs = self.pending_jobs.clone();
         let pending_job_condvar = self.pending_job_condvar.clone();
-        let pause_queue_manager_flag = self.pause_queue_manager_flag.clone();
-        let pause_queue_manager_condvar = self.pause_queue_manager_condvar.clone();
+        let clutch = self.pause_queue_clutch.clone();
         let builder = thread::Builder::new().name(QUEUE_MGR_THREAD_NAME.into());
 
         self.queue_manager_join_handle = Some(builder
             .spawn(move || {
                 // The loop makes this thread run forever.
                 loop {
-                    {
-                        // Wait for pause_flag to go `false`. Do this by waiting using the Condvar,
-                        // this means we are not using CPU cycles. The extra scope is
-                        // so that the `pause_flag_guard` gets dropped and the lock released.
-                        let mut pause_flag_guard = pause_queue_manager_flag.lock().unwrap();
-                        while *pause_flag_guard {
-                            info!("{}: Pausing thread", QUEUE_MGR_THREAD_NAME);
-                            pause_flag_guard = pause_queue_manager_condvar.wait(pause_flag_guard).unwrap();
-                        }
-                    }
+                    clutch.wait_for_release();
 
                     // If we get to here then the worker thread is running. There may or may
                     // not be any pending jobs to process. Execute at most one job (so that
@@ -90,18 +78,14 @@ impl JobEngine {
         info!("{}: Successfully spawned the thread", QUEUE_MGR_THREAD_NAME);
     }
 
-    pub fn pause(&mut self) {
+    pub fn pause(&self) {
         info!("Pausing JobWorker thread");
-        let mut pause_flag = self.pause_queue_manager_flag.lock().unwrap();
-        *pause_flag = true;
-        self.pause_queue_manager_condvar.notify_all();
+        self.pause_queue_clutch.pause_thread();
     }
 
-    pub fn restart(&mut self) {
+    pub fn restart(&self) {
         info!("Restarting JobWorker thread");
-        let mut pause_flag = self.pause_queue_manager_flag.lock().unwrap();
-        *pause_flag = false;
-        self.pause_queue_manager_condvar.notify_all();
+        self.pause_queue_clutch.release_thread();
     }
 
     pub fn add_job(&self, job: Job) {

@@ -4,7 +4,7 @@ use env_logger::Builder;
 use log::info;
 use std::{
     io::Write,
-    sync::{mpsc::channel, Arc, Mutex},
+    sync::{mpsc::channel, Arc, Mutex}, time::Duration,
 };
 
 mod configuration;
@@ -34,7 +34,7 @@ fn main() {
     let config = configuration::new();
     info!("{:?}", config);
 
-    let mut engine = Arc::new(Mutex::new(JobEngine::new()));
+    let engine = Arc::new(Mutex::new(JobEngine::new()));
     let mut engine_lock = engine.lock().unwrap();
     engine_lock.start();
 
@@ -48,8 +48,18 @@ fn main() {
         // Perform an initial full shadow copy.
         let job = ShadowCopyJob::new(dest_dir.clone());
         engine_lock.add_job(job);
+
+
+        // Test pause and restart.
+        ///std::thread::sleep(Duration::from_secs(5));
+        //engine_lock.pause();
         let job = BuildJob::new(dest_dir.clone(), BuildMode::Debug);
         engine_lock.add_job(job);
+        //std::thread::sleep(Duration::from_secs(5));
+        //engine_lock.restart();
+
+
+
 
         // Then watch for incremental file changes. Use another thread to
         // add jobs to the engine.
