@@ -89,11 +89,11 @@ fn configure_logging() {
 
         write!(
             buf,
-            "{:?} {} [{}] ",
+            "{:?} {} ",
             //utc.format("%Y-%m-%dT%H:%M:%S.%fZ"),
             utc, // same, probably faster?
             record.level(),
-            record.target()
+            //record.target()
         )?;
 
         match (record.file(), record.line()) {
