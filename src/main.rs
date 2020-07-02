@@ -87,23 +87,12 @@ fn configure_logging() {
     builder.format(|buf, record| {
         let utc: DateTime<Utc> = Utc::now();
 
-        write!(
-            buf,
-            "{:?} {} ",
-            //utc.format("%Y-%m-%dT%H:%M:%S.%fZ"),
-            utc, // same, probably faster?
-            record.level(),
-            //record.target()
-        )?;
-
         match (record.file(), record.line()) {
-            (Some(file), Some(line)) => write!(buf, "[{}/{}] ", file, line),
-            (Some(file), None) => write!(buf, "[{}] ", file),
-            (None, Some(_line)) => write!(buf, " "),
-            (None, None) => write!(buf, " "),
-        }?;
-
-        writeln!(buf, "{}", record.args())
+            (Some(file), Some(line)) => writeln!(buf, "{:?} {} [{}/{}] {}", utc, record.level(), file, line, record.args()),
+            (Some(file), None) => writeln!(buf, "{:?} {} [{}] {}", utc, record.level(), file, record.args()),
+            (None, Some(_line)) => writeln!(buf, "{:?} {} {}", utc, record.level(), record.args()),
+            (None, None) => writeln!(buf, "{:?} {} {}", utc, record.level(), record.args()),
+        }
     });
 
     builder.init();
