@@ -120,68 +120,7 @@ impl JobEngineInner {
         self.job_added_signal.notify_all();
     }
 
-    /// Create the JOB_EXECUTOR thread. This thread just calls
-    /// `Job.execute()`, one job at a time. It receives jobs on a channel, and sends
-    /// the results back on another channel (where they are picked up by
-    /// the JOB_COMPLETED thread).
-    fn create_job_executor_thread() -> (Sender<Job>, Receiver<Job>) {
-        let (job_exec_sender, job_exec_internal_receiver) = channel::<Job>();
-        let (job_exec_internal_sender, job_exec_receiver) = channel::<Job>();
-
-        let builder = thread::Builder::new().name("JOB_EXECUTOR".into());
-
-        builder
-            .spawn(move || {
-                for mut job in job_exec_internal_receiver {
-                    // TODO: Tidy up the JobState management.
-                    job.execute();
-                    job_exec_internal_sender
-                        .send(job)
-                        .expect("Cannot return job from JOB_EXECUTOR");
-                }
-            })
-            .expect("Cannot create JOB_EXECUTOR thread");
-
-        (job_exec_sender, job_exec_receiver)
-    }
-
-    /// Create the JOB_COMPLETED thread. It is the job of this thread to listen
-    /// for completed job messages which are sent by the JOB_EXECUTOR thread.
-    fn create_job_completed_thread(
-        pending_jobs: JobList,
-        completed_jobs: JobList,
-        job_exec_receiver: Receiver<Job>,
-    ) {
-        let builder = thread::Builder::new().name("JOB_COMPLETED".into());
-
-        builder
-            .spawn(move || {
-                for job in job_exec_receiver {
-                    let mut pending_jobs = pending_jobs.lock().unwrap();
-                    // Find this job by id in the list of pending jobs. It may not be there, if we
-                    // 'tweaked' the job queue while this one was executing. But if we do
-                    // find it, then remove it and add it to the list of completed jobs.
-                    // If it's not found, just ignore it.
-                    if let Some(index) = pending_jobs.iter().position(|j| j.id() == job.id()) {
-                        pending_jobs.remove(index);
-
-                        let mut completed_jobs = completed_jobs.lock().unwrap();
-
-                        info!(
-                            "Completed {}, there are now {} pending and {} completed jobs",
-                            job,
-                            pending_jobs.len(),
-                            completed_jobs.len() + 1
-                        );
-
-                        completed_jobs.push_back(job);
-                    }
-                }
-            })
-            .expect("Cannot create JOB_COMPLETED thread");
-    }
-
-    /// Create the JOB_STARTER thread. This thread is responsible for checking the
+        /// Create the JOB_STARTER thread. This thread is responsible for checking the
     /// `pending_jobs` queue to see if there are any jobs that need executing, and if
     /// there are it clones them and sends them to the JOB_EXECUTOR thread.
     /// If there are no pending jobs then it goes to sleep, until it is woken up by
@@ -235,6 +174,72 @@ impl JobEngineInner {
         }
 
         None
+    }
+
+    /// Create the JOB_EXECUTOR thread. This thread just calls
+    /// `Job.execute()`, one job at a time. It receives jobs on a channel, and sends
+    /// the results back on another channel (where they are picked up by
+    /// the JOB_COMPLETED thread).
+    fn create_job_executor_thread() -> (Sender<Job>, Receiver<Job>) {
+        let (job_exec_sender, job_exec_internal_receiver) = channel::<Job>();
+        let (job_exec_internal_sender, job_exec_receiver) = channel::<Job>();
+
+        let builder = thread::Builder::new().name("JOB_EXECUTOR".into());
+
+        builder
+            .spawn(move || {
+                for mut job in job_exec_internal_receiver {
+                    // TODO: Tidy up the JobState management.
+                    job.execute();
+                    job_exec_internal_sender
+                        .send(job)
+                        .expect("Cannot return job from JOB_EXECUTOR");
+                }
+            })
+            .expect("Cannot create JOB_EXECUTOR thread");
+
+        (job_exec_sender, job_exec_receiver)
+    }
+
+    /// Create the JOB_COMPLETED thread. It is the job of this thread to listen
+    /// for completed job messages which are sent by the JOB_EXECUTOR thread.
+    fn create_job_completed_thread(
+        pending_jobs: JobList,
+        completed_jobs: JobList,
+        job_exec_receiver: Receiver<Job>,
+    ) {
+        let builder = thread::Builder::new().name("JOB_COMPLETED".into());
+
+        builder
+            .spawn(move || {
+                for job in job_exec_receiver {
+                    let mut pending_jobs_lock = pending_jobs.lock().unwrap();
+
+                    // Find this job by id in the list of pending jobs. It may not be there, if we
+                    // 'tweaked' the job queue while this one was executing. But if we do
+                    // find it, then remove it and add it to the list of completed jobs.
+                    // If it's not found, just ignore it.
+                    if let Some(index) = pending_jobs_lock.iter().position(|j| j.id() == job.id()) {
+                        pending_jobs_lock.remove(index);
+                        let pj_len = pending_jobs_lock.len();
+                        // Release lock ASAP.
+                        drop(pending_jobs_lock);
+
+                        let mut completed_jobs_lock = completed_jobs.lock().unwrap();
+                        let msg = format!(
+                            "Completed {}, there are now {} pending and {} completed jobs",
+                            job,
+                            pj_len,
+                            completed_jobs_lock.len() + 1
+                        );
+                        completed_jobs_lock.push_back(job);
+                        drop(completed_jobs_lock);
+
+                        info!("{}", msg);
+                    }
+                }
+            })
+            .expect("Cannot create JOB_COMPLETED thread");
     }
 }
 
