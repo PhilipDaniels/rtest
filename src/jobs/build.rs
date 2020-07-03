@@ -2,8 +2,8 @@ use crate::{
     jobs::{Job, JobKind},
     shadow_copy_destination::ShadowCopyDestination,
 };
-use log::{debug, info};
-use std::{fmt::Display, process::Command};
+use log::{debug, info, warn};
+use std::{fmt::Display, process::{ExitStatus, Command}};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuildMode {
@@ -15,6 +15,9 @@ pub enum BuildMode {
 pub struct BuildJob {
     destination: ShadowCopyDestination,
     build_mode: BuildMode,
+    exit_status: Option<ExitStatus>,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
 }
 
 impl Display for BuildJob {
@@ -28,6 +31,9 @@ impl BuildJob {
         let kind = JobKind::Build(BuildJob {
             destination: destination_directory,
             build_mode,
+            exit_status: None,
+            stdout: Vec::default(),
+            stderr: Vec::default(),
         });
 
         Job::new(kind)
@@ -50,10 +56,17 @@ impl BuildJob {
         command.env("RUST_BACKTRACE", "1");
         command.env("RUSTC_WRAPPER", "");
 
-        //let handle = command.spawn().expect("cargo build failed");
         let output = command.output()
             .expect("`cargo build` command failed to start");
 
-        debug!("Got `cargo build` output: {:?}", output);
+        self.exit_status = Some(output.status);
+        self.stdout = output.stdout;
+        self.stderr = output.stderr;
+
+        if output.status.success() {
+            info!("SUCCEEDED `cargo build`. ExitStatus={:?}", self.exit_status);
+        } else {
+            warn!("FAILED `cargo build`. ExitStatus={:?}", self.exit_status);
+        }
     }
 }

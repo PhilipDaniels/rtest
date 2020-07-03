@@ -1,10 +1,10 @@
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use druid::{AppLauncher, LocalizedString, WindowDesc};
 use env_logger::Builder;
 use log::info;
 use std::{
     io::Write,
-    sync::{mpsc::channel, Arc, Mutex}, time::Duration,
+    sync::{mpsc::channel},
 };
 
 mod configuration;
@@ -85,7 +85,7 @@ fn main() {
 fn configure_logging() {
     let mut builder = Builder::from_default_env();
     builder.format(|buf, record| {
-        let utc: DateTime<Utc> = Utc::now();
+        let utc = Utc::now();
 
         match (record.file(), record.line()) {
             (Some(file), Some(line)) => writeln!(buf, "{:?} {} [{}/{}] {}", utc, record.level(), file, line, record.args()),

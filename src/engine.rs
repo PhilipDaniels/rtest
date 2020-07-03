@@ -120,7 +120,7 @@ impl JobEngineInner {
         self.job_added_signal.notify_all();
     }
 
-        /// Create the JOB_STARTER thread. This thread is responsible for checking the
+    /// Create the JOB_STARTER thread. This thread is responsible for checking the
     /// `pending_jobs` queue to see if there are any jobs that need executing, and if
     /// there are it clones them and sends them to the JOB_EXECUTOR thread.
     /// If there are no pending jobs then it goes to sleep, until it is woken up by
