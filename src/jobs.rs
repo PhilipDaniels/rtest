@@ -8,10 +8,10 @@ pub use file_sync::FileSyncJob;
 pub use shadow_copy::ShadowCopyJob;
 
 use chrono::{DateTime, Utc};
-use log::info;
+use log::{warn, info};
 use logging_timer::stime;
 use std::{
-    fmt::Display,
+    fmt::{self, Display},
     sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -191,4 +191,26 @@ impl Display for Job {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {}", self.id, self.kind)
     }
+}
+
+fn job_succeeded(log_entry: fmt::Arguments) {
+    info!("JOB SUCCEEDED: {}", log_entry);
+}
+
+fn job_failed(log_entry: fmt::Arguments) {
+    warn!("JOB FAILED: {}", log_entry);
+}
+
+#[macro_export]
+macro_rules! succeeded {
+   ($format:tt, $($arg:expr),*) => (
+       crate::jobs::job_succeeded(format_args!($format, $($arg),*))
+   )
+}
+
+#[macro_export]
+macro_rules! failed {
+   ($format:tt, $($arg:expr),*) => (
+       crate::jobs::job_failed(format_args!($format, $($arg),*))
+   )
 }

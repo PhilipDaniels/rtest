@@ -3,7 +3,10 @@ use crate::{
     shadow_copy_destination::ShadowCopyDestination,
 };
 use log::{debug, info, warn};
-use std::{fmt::Display, process::{ExitStatus, Command}};
+use std::{
+    fmt::Display,
+    process::{Command, ExitStatus},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuildMode {
@@ -25,6 +28,8 @@ impl Display for BuildJob {
         write!(f, "Build")
     }
 }
+
+use crate::{failed, succeeded};
 
 impl BuildJob {
     pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> Job {
@@ -56,7 +61,8 @@ impl BuildJob {
         command.env("RUST_BACKTRACE", "1");
         command.env("RUSTC_WRAPPER", "");
 
-        let output = command.output()
+        let output = command
+            .output()
             .expect("`cargo build` command failed to start");
 
         self.exit_status = Some(output.status);
@@ -64,9 +70,11 @@ impl BuildJob {
         self.stderr = output.stderr;
 
         if output.status.success() {
-            info!("SUCCEEDED `cargo build`. ExitStatus={:?}", self.exit_status);
+            succeeded!("`cargo build`. ExitStatus={:?}", self.exit_status);
+            succeeded!("BUILD.stdout = {} bytes", self.stdout.len());
+            succeeded!("BUILD.stderr = {} bytes", self.stderr.len());
         } else {
-            warn!("FAILED `cargo build`. ExitStatus={:?}", self.exit_status);
+            failed!("`cargo build`. ExitStatus={:?}", self.exit_status);
         }
     }
 }
