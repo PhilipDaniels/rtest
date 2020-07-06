@@ -9,6 +9,7 @@ use std::fmt::Display;
 pub struct FileSyncJob {
     destination: ShadowCopyDestination,
     file_sync_event: FileSyncEvent,
+    succeeded: bool,
 }
 
 impl Display for FileSyncJob {
@@ -37,20 +38,25 @@ impl FileSyncJob {
         let kind = JobKind::FileSync(FileSyncJob {
             destination: destination_directory,
             file_sync_event,
+            succeeded: false,
         });
 
         Job::new(kind)
+    }
+
+    pub fn succeeded(&self) -> bool {
+        self.succeeded
     }
 
     pub fn execute(&mut self) {
         match &self.file_sync_event {
             FileSyncEvent::FileUpdate(path) => {
                 if std::path::Path::is_file(path) {
-                    self.destination.copy_file(path);
+                    self.succeeded = self.destination.copy_file(path);
                 }
             }
             FileSyncEvent::Remove(path) => {
-                self.destination.remove_file_or_directory(path);
+                self.succeeded = self.destination.remove_file_or_directory(path);
             }
         }
     }

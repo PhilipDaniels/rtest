@@ -15,6 +15,11 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
+pub trait JobTrait {
+    fn succeeded(&self) -> bool;
+    fn kind(&self) -> &JobKind;
+}
+
 #[derive(Debug, Clone)]
 pub enum CompletionStatus {
     Ok,
@@ -172,6 +177,10 @@ impl Job {
             JobStatus::Pending(_) => true,
             _ => false,
         }
+    }
+
+    pub fn kind(&self) -> &JobKind {
+        &self.kind
     }
 
     #[stime]

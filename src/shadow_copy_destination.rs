@@ -46,47 +46,68 @@ impl ShadowCopyDestination {
     }
 
     /// Copies a `source_file` from the source directory to the destination directory.
-    pub fn copy_file(&self, source_file: &Path) {
+    pub fn copy_file(&self, source_file: &Path) -> bool {
         if self.destination_directory.is_none() {
-            return;
+            return false;
         }
 
         let dest_file_path = self.get_path_in_destination(source_file);
 
         match std::fs::copy(source_file, &dest_file_path) {
-            Ok(_) => Self::copy_succeeded_message(source_file, &dest_file_path),
+            Ok(_) => {
+                Self::copy_succeeded_message(source_file, &dest_file_path);
+                return true;
+            }
             Err(_) => {
                 // Try again, probably the parent directory did not exist.
                 Self::create_destination_parent_dir_for_file(&dest_file_path);
                 match std::fs::copy(source_file, &dest_file_path) {
-                    Ok(_) => Self::copy_succeeded_message(source_file, &dest_file_path),
-                    Err(err) => Self::copy_error_message(source_file, &dest_file_path, &err),
+                    Ok(_) => {
+                        Self::copy_succeeded_message(source_file, &dest_file_path);
+                        return true;
+                    }
+                    Err(err) => {
+                        Self::copy_error_message(source_file, &dest_file_path, &err);
+                        return false;
+                    }
                 }
             }
         }
     }
 
     /// Given a `source_file`, removes the corresponding file in the destination.
-    pub fn remove_file_or_directory(&self, source_path: &Path) {
+    pub fn remove_file_or_directory(&self, source_path: &Path) -> bool {
         if self.destination_directory.is_none() {
-            return;
+            return false;
         }
 
         let dest_path = self.get_path_in_destination(source_path);
 
         if Path::is_dir(&dest_path) {
             match remove_dir_all(&dest_path) {
-                Ok(_) => info!("Removed destination directory {}", dest_path.display()),
-                Err(err) => error!(
-                    "Error removing destination directory {}, err = {}",
-                    dest_path.display(),
-                    err
-                ),
+                Ok(_) => {
+                    info!("Removed destination directory {}", dest_path.display());
+                    return true;
+                }
+                Err(err) => {
+                    error!(
+                        "Error removing destination directory {}, err = {}",
+                        dest_path.display(),
+                        err
+                    );
+                    return false;
+                }
             }
         } else {
             match std::fs::remove_file(&dest_path) {
-                Ok(_) => Self::remove_succeeded_message(&dest_path),
-                Err(err) => Self::remove_failed_message(&dest_path, &err),
+                Ok(_) => {
+                    Self::remove_succeeded_message(&dest_path);
+                    return true;
+                }
+                Err(err) => {
+                    Self::remove_failed_message(&dest_path, &err);
+                    return false;
+                }
             }
         }
     }

@@ -34,13 +34,14 @@ fn main() {
     let config = configuration::new();
     info!("{:?}", config);
 
-    let engine = JobEngine::new();
-
     // If a shadow copy operation is required, kick one off.
     // This & is important to ensure the temp dir gets dropped when we exit,
     // otherwise it gets moved and dropped before we do the shadow-copy!
     let dest_dir =
         ShadowCopyDestination::new(&config.source_directory, &config.destination_directory);
+
+    let engine = JobEngine::new(dest_dir.clone());
+
 
     if dest_dir.is_copying() {
         // Perform an initial full shadow copy.

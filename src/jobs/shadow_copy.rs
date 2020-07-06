@@ -10,6 +10,7 @@ use std::fmt::Display;
 pub struct ShadowCopyJob {
     destination: ShadowCopyDestination,
     num_files_copied: usize,
+    succeeded: bool,
 }
 
 impl Display for ShadowCopyJob {
@@ -35,13 +36,24 @@ impl ShadowCopyJob {
         let kind = JobKind::ShadowCopy(ShadowCopyJob {
             destination: destination_directory,
             num_files_copied: 0,
+            succeeded: false,
         });
 
         Job::new(kind)
     }
 
+    pub fn succeeded(&self) -> bool {
+        self.succeeded
+    }
+
     pub fn execute(&mut self) {
-        let walker = WalkBuilder::new(self.destination.source_directory()).build();
+        let src = self.destination.source_directory();
+        if !std::path::Path::is_dir(src) {
+            self.succeeded = false;
+            return;
+        }
+
+        let walker = WalkBuilder::new(src).build();
         for result in walker {
             match result {
                 Ok(entry) => {
@@ -53,6 +65,10 @@ impl ShadowCopyJob {
                 Err(err) => println!("ERROR: {}", err),
             }
         }
+
+        // Even if 1 or more copies fail, we can still consider outself
+        // to have succeeded.
+        self.succeeded = true;
 
         info!("{} files copied", self.num_files_copied);
     }

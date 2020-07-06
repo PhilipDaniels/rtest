@@ -1,9 +1,13 @@
-use crate::{jobs::Job, thread_clutch::ThreadClutch};
+use crate::{
+    jobs::{BuildJob, BuildMode, Job, JobKind},
+    shadow_copy_destination::ShadowCopyDestination,
+    thread_clutch::ThreadClutch,
+};
 use log::info;
 use std::collections::VecDeque;
 use std::sync::{
     mpsc::{channel, Receiver, Sender},
-    Arc, Condvar, Mutex,
+    Arc, Condvar, Mutex, MutexGuard,
 };
 use std::thread;
 
@@ -14,9 +18,9 @@ pub struct JobEngine {
 
 impl JobEngine {
     /// Creates a new job engine that is running and ready to process jobs.
-    pub fn new() -> Self {
+    pub fn new(dest_dir: ShadowCopyDestination) -> Self {
         Self {
-            inner: Arc::new(JobEngineInner::new()),
+            inner: Arc::new(JobEngineInner::new(dest_dir)),
         }
     }
 
@@ -41,39 +45,101 @@ impl JobEngine {
 
 type JobList = Arc<Mutex<VecDeque<Job>>>;
 
+/// Represents the state of the engine, based on what jobs have completed
+/// and/or are pending.
+#[derive(Debug, Copy, Clone)]
+enum EngineState {
+    /// A build is required.
+    BuildRequired,
+
+    /// A test-run is required.
+    TestRunRequired,
+
+    /// The last build failed. We are stuck here until we
+    /// get new files to copy, then we can run a build again
+    /// in the hope that it fixes it.
+    LastBuildFailed,
+
+    /// Waiting. All jobs have been run and we finished building
+    /// and running tests.
+    WaitingOk,
+
+    ShadowCopyFailed,
+    Working,
+}
+
+impl EngineState {
+    fn job_completed(&mut self, job: &Job) {
+        match job.kind() {
+            JobKind::ShadowCopy(shadow_copy_job) => {
+                if shadow_copy_job.succeeded() {
+                    *self = Self::BuildRequired;
+                } else {
+                    *self = Self::ShadowCopyFailed;
+                }
+            }
+
+            JobKind::FileSync(file_sync_job) => {
+                if file_sync_job.succeeded() {
+                    *self = Self::BuildRequired;
+                }
+            }
+
+            JobKind::Build(build_job) => {
+                if build_job.succeeded() {
+                    *self = Self::TestRunRequired;
+                } else {
+                    *self = Self::LastBuildFailed;
+                }
+            }
+        }
+    }
+
+    /// Called when a file copy has been successfully completed.
+    /// Changes the state to `BuildRequired`.
+    fn file_copy_completed(&mut self) {
+        *self = Self::BuildRequired;
+    }
+}
+
 #[derive(Debug)]
 struct JobEngineInner {
-    // The list of pending (yet to be executed) jobs.
+    dest_dir: ShadowCopyDestination,
+
+    /// The list of pending (yet to be executed) jobs.
     pending_jobs: JobList,
 
-    // The list of completed jobs.
+    /// The list of completed jobs.
     completed_jobs: JobList,
 
-    // A clutch that allows us to pause and restart the JOB_STARTER thread.
-    // This basically allows us to pause the entire job queue, because if we
-    // don't start to execute new jobs, nothing happens. Yet we can still
-    // add new jobs to the queue, because that is controlled by a different thread.
+    /// A clutch that allows us to pause and restart the JOB_STARTER thread.
+    /// This basically allows us to pause the entire job queue, because if we
+    /// don't start to execute new jobs, nothing happens. Yet we can still
+    /// add new jobs to the queue, because that is controlled by a different thread.
     job_starter_clutch: ThreadClutch,
 
-    // The `job_added_signal` is notified when a new job is added to the pending queue.
-    // This will cause the JOB_STARTER thread to wake up (it goes to sleep when
-    // there are no pending jobs).
+    /// The `job_added_signal` is notified when a new job is added to the pending queue.
+    /// This will cause the JOB_STARTER thread to wake up (it goes to sleep when
+    /// there are no pending jobs).
     job_added_signal: Arc<Condvar>,
+
+    engine_state: Arc<Mutex<EngineState>>,
 }
 
 impl JobEngineInner {
-    pub fn new() -> Self {
+    pub fn new(dest_dir: ShadowCopyDestination) -> Self {
         let (job_exec_sender, job_exec_receiver) = Self::create_job_executor_thread();
 
         let pending_jobs: JobList = Default::default();
         let completed_jobs: JobList = Default::default();
-
+        let engine_state = Arc::new(Mutex::new(EngineState::WaitingOk));
         let job_added_signal = Arc::new(Condvar::new());
 
         Self::create_job_completed_thread(
             pending_jobs.clone(),
             completed_jobs.clone(),
             job_exec_receiver,
+            engine_state.clone(),
         );
 
         let job_starter_clutch = ThreadClutch::default();
@@ -82,13 +148,17 @@ impl JobEngineInner {
             pending_jobs.clone(),
             job_exec_sender,
             job_added_signal.clone(),
+            engine_state.clone(),
+            dest_dir.clone(),
         );
 
         Self {
+            dest_dir,
             pending_jobs,
             completed_jobs,
             job_starter_clutch,
-            job_added_signal: job_added_signal,
+            job_added_signal,
+            engine_state,
         }
     }
 
@@ -103,9 +173,13 @@ impl JobEngineInner {
     }
 
     pub fn add_job(&self, job: Job) {
+        Self::add_job_inner(&self.pending_jobs, job, &self.job_added_signal);
+    }
+
+    fn add_job_inner(pending_jobs: &JobList, job: Job, signal: &Arc<Condvar>) {
         // This lock won't block the caller much, because all other locks
         // on the `pending_jobs` are very short lived.
-        let mut lock = self.pending_jobs.lock().unwrap();
+        let mut lock = pending_jobs.lock().unwrap();
 
         info!(
             "Added {}, there are now {} jobs in the pending queue",
@@ -117,7 +191,7 @@ impl JobEngineInner {
 
         // Tell everybody listening (really it's just us with one thread) that there
         // is now a job in the pending queue.
-        self.job_added_signal.notify_all();
+        signal.notify_all();
     }
 
     /// Create the JOB_STARTER thread. This thread is responsible for checking the
@@ -134,6 +208,8 @@ impl JobEngineInner {
         mut pending_jobs: JobList,
         job_exec_sender: Sender<Job>,
         signal: Arc<Condvar>,
+        engine_state: Arc<Mutex<EngineState>>,
+        dest_dir: ShadowCopyDestination,
     ) {
         let builder = thread::Builder::new().name("JOB_STARTER".into());
 
@@ -149,13 +225,27 @@ impl JobEngineInner {
                             .send(job)
                             .expect("Could not send job to JOB_EXECUTOR thread");
                     } else {
-                        // No jobs exist, go to sleep waiting for a signal on the condition variable.
-                        // This will be signaled by `add_job`.
+                        let mut engine_state_lock = engine_state.lock().unwrap();
+                        let more_jobs = Self::required_jobs(dest_dir.clone(), &engine_state_lock);
 
-                        // The idea here is that this will BLOCK and you are not allowed to touch the
-                        // data guarded by the MUTEX until the signal happens.
-                        let guard = dummy_mutex.lock().unwrap();
-                        let _ = signal.wait(guard).unwrap();
+                        if more_jobs.is_empty() {
+                            // No jobs exist, go to sleep waiting for a signal on the condition variable.
+                            // This will be signaled by `add_job`.
+
+                            // The idea here is that this will BLOCK and you are not allowed to touch the
+                            // data guarded by the MUTEX until the signal happens.
+                            *engine_state_lock = EngineState::WaitingOk;
+                            let guard = dummy_mutex.lock().unwrap();
+                            let _ = signal.wait(guard).unwrap();
+                        } else {
+                            // We got into a state which means more jobs are required.
+                            // Add them to the queue.
+                            for job in more_jobs {
+                                Self::add_job_inner(&pending_jobs, job, &signal);
+                            }
+
+                            *engine_state_lock = EngineState::Working;
+                        }
                     }
                 }
             })
@@ -174,6 +264,17 @@ impl JobEngineInner {
         }
 
         None
+    }
+
+    fn required_jobs(dest_dir: ShadowCopyDestination, engine_state_lock: &MutexGuard<EngineState>) -> Vec<Job> {
+        match **engine_state_lock {
+            EngineState::BuildRequired => vec![BuildJob::new(dest_dir, BuildMode::Debug)],
+            EngineState::TestRunRequired => vec![],
+            EngineState::LastBuildFailed => vec![],
+            EngineState::WaitingOk => vec![],
+            EngineState::ShadowCopyFailed => vec![],
+            EngineState::Working => vec![],
+        }
     }
 
     /// Create the JOB_EXECUTOR thread. This thread just calls
@@ -207,12 +308,17 @@ impl JobEngineInner {
         pending_jobs: JobList,
         completed_jobs: JobList,
         job_exec_receiver: Receiver<Job>,
+        engine_state: Arc<Mutex<EngineState>>,
     ) {
         let builder = thread::Builder::new().name("JOB_COMPLETED".into());
 
         builder
             .spawn(move || {
                 for job in job_exec_receiver {
+                    let mut engine_state_lock = engine_state.lock().unwrap();
+                    engine_state_lock.job_completed(&job);
+                    drop(engine_state_lock);
+
                     let mut pending_jobs_lock = pending_jobs.lock().unwrap();
 
                     // Find this job by id in the list of pending jobs. It may not be there, if we

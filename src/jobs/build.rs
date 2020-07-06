@@ -32,6 +32,10 @@ impl Display for BuildJob {
 use crate::{failed, succeeded};
 
 impl BuildJob {
+    pub fn succeeded(&self) -> bool {
+        self.exit_status.map_or(false, |s| s.success())
+    }
+
     pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> Job {
         let kind = JobKind::Build(BuildJob {
             destination: destination_directory,
