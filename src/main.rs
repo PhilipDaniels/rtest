@@ -16,7 +16,7 @@ mod thread_clutch;
 mod ui;
 mod utils;
 
-use engine::JobEngine;
+use engine::{NewJobEngine, JobEngine};
 use jobs::{BuildJob, BuildMode, FileSyncJob, ShadowCopyJob};
 use shadow_copy_destination::ShadowCopyDestination;
 use source_directory_watcher::FileSyncEvent;
@@ -40,7 +40,7 @@ fn main() {
     let dest_dir =
         ShadowCopyDestination::new(&config.source_directory, &config.destination_directory);
 
-    let engine = JobEngine::new(dest_dir.clone());
+    let engine = NewJobEngine::new(dest_dir.clone());
 
 
     if dest_dir.is_copying() {
