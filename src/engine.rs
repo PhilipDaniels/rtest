@@ -11,11 +11,31 @@ use std::sync::{
 };
 use std::thread;
 
+/*
+* While a job is executing, the GUI needs to update to show the latest status.
+* When a job is completed, we will still want to display details in the GUI.
+  For example, a list of completed tests. So the GUI is based on Vec<Tests>,
+  and each test is linked to a particular job. One job may be linked to
+  several tests.
+* We need to support cancellation of jobs.
+* When a job finishes execution it may create N more jobs.
+
+Algorithm for adding file sync
+FOR SOME PATH P
+If a build is running, stop it
+If OP is REMOVE, remove all file copy jobs and create a remove job
+ELSE
+    if there is a previous job for this file, remove it and insert a new COPY job (op is likely to be WRITE, CLOSE_WRITE, RENAME or CHMOD)
+
+Flag for 'is a build required'?
+*/
+
 type JobList = Arc<Mutex<VecDeque<Job>>>;
 
 #[derive(Debug, Clone)]
 pub struct JobEngine {
     dest_dir: ShadowCopyDestination,
+
     /// The list of pending (yet to be executed) jobs.
     pending_jobs: JobList,
 
@@ -301,24 +321,3 @@ impl EngineState {
         *self = Self::BuildRequired;
     }
 }
-
-/*
-We need the following
-
-* While a job is executing, the GUI needs to update to show the latest status.
-* When a job is completed, we will still want to display details in the GUI.
-  For example, a list of completed tests. So the GUI is based on Vec<Tests>,
-  and each test is linked to a particular job. One job may be linked to
-  several tests.
-* We need to support cancellation of jobs.
-* When a job finishes execution it may create N more jobs.
-
-Algorithm for adding file sync
-FOR SOME PATH P
-If a build is running, stop it
-If OP is REMOVE, remove all file copy jobs and create a remove job
-ELSE
-    if there is a previous job for this file, remove it and insert a new COPY job (op is likely to be WRITE, CLOSE_WRITE, RENAME or CHMOD)
-
-Flag for 'is a build required'?
-*/
