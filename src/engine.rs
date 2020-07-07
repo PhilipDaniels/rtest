@@ -39,7 +39,7 @@ pub struct JobEngine {
 impl JobEngine {
     /// Creates a new job engine that is running and ready to process jobs.
     pub fn new(dest_dir: ShadowCopyDestination) -> Self {
-        let me = Self {
+        let this = Self {
             dest_dir,
             pending_jobs: Default::default(),
             completed_jobs: Default::default(),
@@ -57,10 +57,15 @@ impl JobEngine {
         // the results back on another channel (where they are picked up by
         // the JOB_COMPLETED thread).
         let builder = thread::Builder::new().name("JOB_EXECUTOR".into());
-        let this = me.clone();
         builder
-            .spawn(move || {
-                this.run_job_executor_thread(job_exec_internal_receiver, job_exec_internal_sender)
+            .spawn({
+                let this = this.clone();
+                move || {
+                    this.run_job_executor_thread(
+                        job_exec_internal_receiver,
+                        job_exec_internal_sender,
+                    )
+                }
             })
             .expect("Cannot create JOB_EXECUTOR thread");
 
@@ -74,24 +79,24 @@ impl JobEngine {
         // be observable / iterable, so we must maintain our own queue, we can't use the
         // channels queue because iterating it consumes the items.
         let builder = thread::Builder::new().name("JOB_STARTER".into());
-        let this = me.clone();
         builder
-            .spawn(move || {
-                this.run_job_starter_thread(job_exec_sender);
+            .spawn({
+                let this = this.clone();
+                move || this.run_job_starter_thread(job_exec_sender)
             })
             .expect("Cannot create JOB_STARTER thread");
 
         // Create the JOB_COMPLETED thread. It is the job of this thread to listen
         // for completed job messages which are sent by the JOB_EXECUTOR thread.
         let builder = thread::Builder::new().name("JOB_COMPLETED".into());
-        let this = me.clone();
         builder
-            .spawn(move || {
-                this.run_job_completed_thread(job_exec_receiver);
+            .spawn({
+                let this = this.clone();
+                move || this.run_job_completed_thread(job_exec_receiver)
             })
             .expect("Cannot create JOB_COMPLETED thread");
 
-        me
+        this
     }
 
     /// Pauses the job engine.
