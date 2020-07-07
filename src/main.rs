@@ -2,10 +2,7 @@ use chrono::Utc;
 use druid::{AppLauncher, LocalizedString, WindowDesc};
 use env_logger::Builder;
 use log::info;
-use std::{
-    io::Write,
-    sync::{mpsc::channel},
-};
+use std::{io::Write, sync::mpsc::channel};
 
 mod configuration;
 mod engine;
@@ -16,7 +13,7 @@ mod thread_clutch;
 mod ui;
 mod utils;
 
-use engine::{NewJobEngine, JobEngine};
+use engine::JobEngine;
 use jobs::{BuildJob, BuildMode, FileSyncJob, ShadowCopyJob};
 use shadow_copy_destination::ShadowCopyDestination;
 use source_directory_watcher::FileSyncEvent;
@@ -40,14 +37,12 @@ fn main() {
     let dest_dir =
         ShadowCopyDestination::new(&config.source_directory, &config.destination_directory);
 
-    let engine = NewJobEngine::new(dest_dir.clone());
-
+    let engine = JobEngine::new(dest_dir.clone());
 
     if dest_dir.is_copying() {
         // Perform an initial full shadow copy.
         let job = ShadowCopyJob::new(dest_dir.clone());
         engine.add_job(job);
-
 
         // Test pause and restart.
         //std::thread::sleep(Duration::from_secs(5));
@@ -56,9 +51,6 @@ fn main() {
         engine.add_job(job);
         //std::thread::sleep(Duration::from_secs(5));
         //engine_lock.restart();
-
-
-
 
         // Then watch for incremental file changes. Use another thread to
         // add jobs to the engine.
@@ -89,8 +81,23 @@ fn configure_logging() {
         let utc = Utc::now();
 
         match (record.file(), record.line()) {
-            (Some(file), Some(line)) => writeln!(buf, "{:?} {} [{}/{}] {}", utc, record.level(), file, line, record.args()),
-            (Some(file), None) => writeln!(buf, "{:?} {} [{}] {}", utc, record.level(), file, record.args()),
+            (Some(file), Some(line)) => writeln!(
+                buf,
+                "{:?} {} [{}/{}] {}",
+                utc,
+                record.level(),
+                file,
+                line,
+                record.args()
+            ),
+            (Some(file), None) => writeln!(
+                buf,
+                "{:?} {} [{}] {}",
+                utc,
+                record.level(),
+                file,
+                record.args()
+            ),
             (None, Some(_line)) => writeln!(buf, "{:?} {} {}", utc, record.level(), record.args()),
             (None, None) => writeln!(buf, "{:?} {} {}", utc, record.level(), record.args()),
         }

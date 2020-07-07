@@ -3,6 +3,9 @@ use log::{error, info};
 use remove_dir_all::remove_dir_all;
 use std::path::{Path, PathBuf};
 
+// TODO: Extract a trait and provide NullShadowCopyDestination and
+// TemporaryShadowCopyDestination implementations.
+
 /// The temporary directory where we make the shadow copy and do the
 /// compilations and test runs.
 #[derive(Debug, Clone)]
