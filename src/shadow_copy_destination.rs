@@ -3,15 +3,27 @@ use log::{error, info};
 use remove_dir_all::remove_dir_all;
 use std::path::{Path, PathBuf};
 
-// TODO: Extract a trait and provide NullShadowCopyDestination and
-// TemporaryShadowCopyDestination implementations.
+#[derive(Debug, Clone)]
+pub enum DestinationDirectory {
+    UseSourceDirectory,
+    UseOtherDIrectory(PathBuf),
+}
+
+impl DestinationDirectory {
+    fn is_copying(&self) -> bool {
+        match self {
+            DestinationDirectory::UseSourceDirectory => false,
+            DestinationDirectory::UseOtherDIrectory(_) => true,
+        }
+    }
+}
 
 /// The temporary directory where we make the shadow copy and do the
 /// compilations and test runs.
 #[derive(Debug, Clone)]
 pub struct ShadowCopyDestination {
     source_directory: PathBuf,
-    destination_directory: Option<PathBuf>,
+    destination: DestinationDirectory,
 }
 
 impl ShadowCopyDestination {
@@ -22,35 +34,41 @@ impl ShadowCopyDestination {
         match destination_type {
             DestinationType::SourceDirectory(_) => Self {
                 source_directory: source_directory.into(),
-                destination_directory: None,
+                destination: DestinationDirectory::UseSourceDirectory,
             },
             DestinationType::NamedDirectory(dest_dir) => Self {
                 source_directory: source_directory.into(),
-                destination_directory: Some(dest_dir.into()),
+                destination: DestinationDirectory::UseOtherDIrectory(dest_dir.into()),
             },
             DestinationType::TempDirectory(tempdir) => Self {
                 source_directory: source_directory.into(),
-                destination_directory: Some(tempdir.path().into()),
+                destination: DestinationDirectory::UseOtherDIrectory(tempdir.path().into()),
             },
         }
     }
 
     /// Returns true if we are not actually copying files into a destination directory.
     pub fn is_copying(&self) -> bool {
-        self.destination_directory.is_some()
+        self.destination.is_copying()
     }
 
+    /// Returns the source directory we are copying from.
     pub fn source_directory(&self) -> &Path {
         &self.source_directory
     }
 
-    pub fn destination_directory(&self) -> Option<&PathBuf> {
-        self.destination_directory.as_ref()
+    /// Returns the destination directory we are copying to.
+    /// Returns `None` in the case that we are not actually doing any copying.
+    pub fn destination_directory(&self) -> Option<&Path> {
+        match &self.destination {
+            DestinationDirectory::UseSourceDirectory => None,
+            DestinationDirectory::UseOtherDIrectory(dir) => Some(dir),
+        }
     }
 
     /// Copies a `source_file` from the source directory to the destination directory.
     pub fn copy_file(&self, source_file: &Path) -> bool {
-        if self.destination_directory.is_none() {
+        if !self.is_copying() {
             return false;
         }
 
@@ -80,7 +98,7 @@ impl ShadowCopyDestination {
 
     /// Given a `source_file`, removes the corresponding file in the destination.
     pub fn remove_file_or_directory(&self, source_path: &Path) -> bool {
-        if self.destination_directory.is_none() {
+        if !self.is_copying() {
             return false;
         }
 
@@ -118,8 +136,10 @@ impl ShadowCopyDestination {
     /// Converts a source path into a corresponding path in the destination directory.
     fn get_path_in_destination(&self, source_path: &Path) -> PathBuf {
         let source_sub_path = self.get_source_sub_path(source_path);
-        let mut dest_path = self.destination_directory.clone()
-            .expect("`get_path_in_destination` should only be called when there actually is a `destination_directory`");
+        let mut dest_path = self.destination_directory()
+                .expect("`get_path_in_destination` should only be called when there actually is a `destination_directory`")
+                .to_owned();
+
         dest_path.push(source_sub_path);
         dest_path
     }
