@@ -37,6 +37,7 @@ pub struct NewJobEngine {
 }
 
 impl NewJobEngine {
+    /// Creates a new job engine that is running and ready to process jobs.
     pub fn new(dest_dir: ShadowCopyDestination) -> Self {
         let me = Self {
             dest_dir,
