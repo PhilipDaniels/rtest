@@ -232,10 +232,9 @@ impl JobEngine {
 
     fn run_job_completed_thread(&self, job_exec_receiver: Receiver<Job>) {
         for job in job_exec_receiver {
-            // TODO
-            // let mut engine_state_lock = engine_state.lock().unwrap();
-            // engine_state_lock.job_completed(&job);
-            // drop(engine_state_lock);
+            let mut engine_state_lock = self.engine_state.lock().unwrap();
+            engine_state_lock.job_completed(&job);
+            drop(engine_state_lock);
 
             let mut pending_jobs_lock = self.pending_jobs.lock().unwrap();
 
