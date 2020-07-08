@@ -1,5 +1,5 @@
 use crate::{
-    jobs::{BuildJob, BuildMode, Job, JobKind},
+    jobs::{BuildJob, BuildMode, Job, JobKind, ShadowCopyJob},
     shadow_copy_destination::ShadowCopyDestination,
     thread_clutch::ThreadClutch,
 };
@@ -7,7 +7,7 @@ use log::info;
 use std::collections::VecDeque;
 use std::sync::{
     mpsc::{channel, Receiver, Sender},
-    Arc, Condvar, Mutex, MutexGuard,
+    Arc, Condvar, Mutex, MutexGuard, atomic::{Ordering, AtomicBool},
 };
 use std::thread;
 
@@ -53,7 +53,7 @@ pub struct JobEngine {
     /// there are no pending jobs).
     job_added_signal: Arc<Condvar>,
 
-    engine_state: Arc<Mutex<EngineState>>,
+    build_required: Arc<AtomicBool>,
 }
 
 impl JobEngine {
@@ -65,7 +65,7 @@ impl JobEngine {
             completed_jobs: Default::default(),
             job_starter_clutch: Default::default(),
             job_added_signal: Default::default(),
-            engine_state: Arc::new(Mutex::new(EngineState::WaitingOk)),
+            build_required: Default::default(),
         };
 
         // These channels are used to connect up the various threads.
@@ -134,23 +134,26 @@ impl JobEngine {
         self.job_starter_clutch.release_threads();
     }
 
-    /// Add a job to the end of the queue.
-    pub fn add_job(&self, job: Job) {
-        // This lock won't block the caller much, because all other locks
-        // on the `pending_jobs` are very short lived.
-        let mut pending_jobs_lock = self.pending_jobs.lock().unwrap();
-
+    fn add_job_inner(&self, job: Job, mut pending_jobs_guard: MutexGuard<VecDeque<Job>>) {
         info!(
             "Added {}, there are now {} jobs in the pending queue",
             job,
-            pending_jobs_lock.len() + 1
+            pending_jobs_guard.len() + 1
         );
 
-        pending_jobs_lock.push_back(job);
+        pending_jobs_guard.push_back(job);
 
         // Tell everybody listening (really it's just us with one thread) that there
         // is now a job in the pending queue.
         self.job_added_signal.notify_all();
+    }
+
+    /// Add a job to the end of the queue.
+    pub fn add_job(&self, job: Job) {
+        // This lock won't block the caller much, because all other locks
+        // on the `pending_jobs` are very short lived.
+        let pending_jobs_guard = self.pending_jobs.lock().unwrap();
+        self.add_job_inner(job, pending_jobs_guard);
     }
 
     fn run_job_executor_thread(
@@ -178,27 +181,10 @@ impl JobEngine {
                     .send(job)
                     .expect("Could not send job to JOB_EXECUTOR thread");
             } else {
-                let mut engine_state_lock = self.engine_state.lock().unwrap();
-                let more_jobs = self.required_jobs(&engine_state_lock);
-
-                if more_jobs.is_empty() {
-                    // No jobs exist, go to sleep waiting for a signal on the condition variable.
-                    // This will be signaled by `add_job`.
-
-                    // The idea here is that this will BLOCK and you are not allowed to touch the
-                    // data guarded by the MUTEX until the signal happens.
-                    *engine_state_lock = EngineState::WaitingOk;
-                    let guard = dummy_mutex.lock().unwrap();
-                    let _ = self.job_added_signal.wait(guard).unwrap();
-                } else {
-                    // We got into a state which means more jobs are required.
-                    // Add them to the queue.
-                    for job in more_jobs {
-                        self.add_job(job);
-                    }
-
-                    *engine_state_lock = EngineState::Working;
-                }
+                // The idea here is that this will BLOCK and you are not allowed to touch the
+                // data guarded by the MUTEX until the signal happens.
+                let guard = dummy_mutex.lock().unwrap();
+                let _ = self.job_added_signal.wait(guard).unwrap();
             }
         }
     }
@@ -217,24 +203,9 @@ impl JobEngine {
         None
     }
 
-    fn required_jobs(&self, engine_state_lock: &MutexGuard<EngineState>) -> Vec<Job> {
-        match **engine_state_lock {
-            EngineState::BuildRequired => {
-                vec![BuildJob::new(self.dest_dir.clone(), BuildMode::Debug)]
-            }
-            EngineState::TestRunRequired => vec![],
-            EngineState::LastBuildFailed => vec![],
-            EngineState::WaitingOk => vec![],
-            EngineState::ShadowCopyFailed => vec![],
-            EngineState::Working => vec![],
-        }
-    }
-
     fn run_job_completed_thread(&self, job_exec_receiver: Receiver<Job>) {
         for job in job_exec_receiver {
-            let mut engine_state_lock = self.engine_state.lock().unwrap();
-            engine_state_lock.job_completed(&job);
-            drop(engine_state_lock);
+            self.set_flags(&job);
 
             let mut pending_jobs_lock = self.pending_jobs.lock().unwrap();
 
@@ -245,8 +216,6 @@ impl JobEngine {
             if let Some(index) = pending_jobs_lock.iter().position(|j| j.id() == job.id()) {
                 pending_jobs_lock.remove(index);
                 let pj_len = pending_jobs_lock.len();
-                // Release lock ASAP.
-                drop(pending_jobs_lock);
 
                 let mut completed_jobs_lock = self.completed_jobs.lock().unwrap();
                 let msg = format!(
@@ -260,63 +229,49 @@ impl JobEngine {
 
                 info!("{}", msg);
             }
+
+            if pending_jobs_lock.is_empty() {
+                if self.build_required.load(Ordering::SeqCst) {
+                    self.add_build_job(pending_jobs_lock);
+                }
+            }
         }
     }
-}
 
-/// Represents the state of the engine, based on what jobs have completed
-/// and/or are pending.
-#[derive(Debug, Copy, Clone)]
-enum EngineState {
-    /// A build is required.
-    BuildRequired,
+    /// Convenince method to add a new build job.
+    /// TODO: In the future this might be more sophisticated, for example checking to see
+    /// if there is an existing build job already in the pipeline and moving it to the end (if it's
+    /// not already running, that is).
+    fn add_build_job(&self, pending_jobs_guard: MutexGuard<VecDeque<Job>>) {
+        let job = BuildJob::new(self.dest_dir.clone(), BuildMode::Debug);
+        self.add_job_inner(job, pending_jobs_guard);
+    }
 
-    /// A test-run is required.
-    TestRunRequired,
-
-    /// The last build failed. We are stuck here until we
-    /// get new files to copy, then we can run a build again
-    /// in the hope that it fixes it.
-    LastBuildFailed,
-
-    /// Waiting. All jobs have been run and we finished building
-    /// and running tests.
-    WaitingOk,
-
-    ShadowCopyFailed,
-    Working,
-}
-
-impl EngineState {
-    fn job_completed(&mut self, job: &Job) {
+    /// Sets the various state flags based on the job.
+    fn set_flags(&self, job: &Job) {
         match job.kind() {
             JobKind::ShadowCopy(shadow_copy_job) => {
                 if shadow_copy_job.succeeded() {
-                    *self = Self::BuildRequired;
+                    self.build_required.store(true, Ordering::SeqCst);
                 } else {
-                    *self = Self::ShadowCopyFailed;
+                    self.build_required.store(false, Ordering::SeqCst);
                 }
             }
 
             JobKind::FileSync(file_sync_job) => {
                 if file_sync_job.succeeded() {
-                    *self = Self::BuildRequired;
+                    self.build_required.store(true, Ordering::SeqCst);
                 }
             }
 
             JobKind::Build(build_job) => {
                 if build_job.succeeded() {
-                    *self = Self::TestRunRequired;
+                    self.build_required.store(false, Ordering::SeqCst);
                 } else {
-                    *self = Self::LastBuildFailed;
+                    // TODO: This is a problem. Will rebuild infinitely.
+                    self.build_required.store(true, Ordering::SeqCst);
                 }
             }
         }
-    }
-
-    /// Called when a file copy has been successfully completed.
-    /// Changes the state to `BuildRequired`.
-    fn file_copy_completed(&mut self) {
-        *self = Self::BuildRequired;
     }
 }
