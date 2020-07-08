@@ -162,7 +162,6 @@ impl JobEngine {
         job_exec_internal_sender: Sender<Job>,
     ) {
         for mut job in job_exec_internal_receiver {
-            // TODO: Tidy up the JobState management.
             job.execute();
             job_exec_internal_sender
                 .send(job)
