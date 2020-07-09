@@ -1,5 +1,5 @@
 use crate::{
-    jobs::{BuildJob, BuildMode, Job, JobKind, ShadowCopyJob},
+    jobs::{BuildJob, BuildMode, Job, JobKind, ShadowCopyJob, PendingJob, CompletedJob, ExecutingJob},
     shadow_copy_destination::ShadowCopyDestination,
     thread_clutch::ThreadClutch,
 };
@@ -30,17 +30,19 @@ ELSE
 Flag for 'is a build required'?
 */
 
-type JobList = Arc<Mutex<VecDeque<Job>>>;
+type JobList = Arc<Mutex<VecDeque<PendingJob>>>;
 
 #[derive(Debug, Clone)]
 pub struct JobEngine {
     dest_dir: ShadowCopyDestination,
 
     /// The list of pending (yet to be executed) jobs.
-    pending_jobs: JobList,
+    pending_jobs: Arc<Mutex<VecDeque<PendingJob>>>,
+
+    executing_job: Option<ExecutingJob>,
 
     /// The list of completed jobs.
-    completed_jobs: JobList,
+    completed_jobs: Arc<Mutex<VecDeque<CompletedJob>>>,
 
     /// A clutch that allows us to pause and restart the JOB_STARTER thread.
     /// This basically allows us to pause the entire job queue, because if we
@@ -62,6 +64,7 @@ impl JobEngine {
         let this = Self {
             dest_dir,
             pending_jobs: Default::default(),
+            executing_job: Default::default(),
             completed_jobs: Default::default(),
             job_starter_clutch: Default::default(),
             job_added_signal: Default::default(),
@@ -69,8 +72,8 @@ impl JobEngine {
         };
 
         // These channels are used to connect up the various threads.
-        let (job_exec_sender, job_exec_internal_receiver) = channel::<Job>();
-        let (job_exec_internal_sender, job_exec_receiver) = channel::<Job>();
+        let (job_exec_sender, job_exec_internal_receiver) = channel::<PendingJob>();
+        let (job_exec_internal_sender, job_exec_receiver) = channel::<CompletedJob>();
 
         // Create the JOB_EXECUTOR thread. This thread just calls
         // `Job.execute()`, one job at a time. It receives jobs on a channel, and sends
@@ -134,7 +137,7 @@ impl JobEngine {
         self.job_starter_clutch.release_threads();
     }
 
-    fn add_job_inner(&self, job: Job, mut pending_jobs_guard: MutexGuard<VecDeque<Job>>) {
+    fn add_job_inner(&self, job: PendingJob, mut pending_jobs_guard: MutexGuard<VecDeque<PendingJob>>) {
         info!(
             "Added {}, there are now {} jobs in the pending queue",
             job,
@@ -149,7 +152,7 @@ impl JobEngine {
     }
 
     /// Add a job to the end of the queue.
-    pub fn add_job(&self, job: Job) {
+    pub fn add_job(&self, job: PendingJob) {
         // This lock won't block the caller much, because all other locks
         // on the `pending_jobs` are very short lived.
         let pending_jobs_guard = self.pending_jobs.lock().unwrap();
@@ -158,24 +161,25 @@ impl JobEngine {
 
     fn run_job_executor_thread(
         &self,
-        job_exec_internal_receiver: Receiver<Job>,
-        job_exec_internal_sender: Sender<Job>,
+        job_exec_internal_receiver: Receiver<PendingJob>,
+        job_exec_internal_sender: Sender<CompletedJob>,
     ) {
-        for mut job in job_exec_internal_receiver {
-            job.execute();
+        for job in job_exec_internal_receiver {
+            let job = job.execute();
             job_exec_internal_sender
                 .send(job)
                 .expect("Cannot return job from JOB_EXECUTOR");
         }
     }
 
-    fn run_job_starter_thread(&self, job_exec_sender: Sender<Job>) {
+    fn run_job_starter_thread(&self, job_exec_sender: Sender<PendingJob>) {
         let dummy_mutex = Mutex::new(());
 
         loop {
             self.job_starter_clutch.wait_for_release();
 
             if let Some(job) = self.get_next_job() {
+                info!("Got next job {:?}", job);
                 job_exec_sender
                     .send(job)
                     .expect("Could not send job to JOB_EXECUTOR thread");
@@ -188,25 +192,18 @@ impl JobEngine {
         }
     }
 
-    fn get_next_job(&self) -> Option<Job> {
-        let mut pending_jobs_lock = self.pending_jobs.lock().unwrap();
-        for job in pending_jobs_lock.iter_mut() {
-            if job.is_pending() {
-                // Mark the job while it remains in the queue, so that we
-                // skip over it the next time.
-                job.begin_execution();
-                return Some(job.clone());
-            }
-        }
-
-        None
+    fn get_next_job(&self) -> Option<PendingJob> {
+        let mut pending_jobs_guard = self.pending_jobs.lock().unwrap();
+        pending_jobs_guard.pop_front()
     }
 
-    fn run_job_completed_thread(&self, job_exec_receiver: Receiver<Job>) {
+    fn run_job_completed_thread(&self, job_exec_receiver: Receiver<CompletedJob>) {
         for job in job_exec_receiver {
+            info!("Received job in run_job_completed_thread()");
             self.set_flags(&job);
 
             let mut pending_jobs_lock = self.pending_jobs.lock().unwrap();
+            info!("Acquired lock in run_job_completed_thread()");
 
             // Find this job by id in the list of pending jobs. It may not be there, if we
             // 'tweaked' the job queue while this one was executing. But if we do
@@ -241,13 +238,13 @@ impl JobEngine {
     /// TODO: In the future this might be more sophisticated, for example checking to see
     /// if there is an existing build job already in the pipeline and moving it to the end (if it's
     /// not already running, that is).
-    fn add_build_job(&self, pending_jobs_guard: MutexGuard<VecDeque<Job>>) {
+    fn add_build_job(&self, pending_jobs_guard: MutexGuard<VecDeque<PendingJob>>) {
         let job = BuildJob::new(self.dest_dir.clone(), BuildMode::Debug);
         self.add_job_inner(job, pending_jobs_guard);
     }
 
     /// Sets the various state flags based on the job.
-    fn set_flags(&self, job: &Job) {
+    fn set_flags(&self, job: &CompletedJob) {
         match job.kind() {
             JobKind::ShadowCopy(shadow_copy_job) => {
                 if shadow_copy_job.succeeded() {

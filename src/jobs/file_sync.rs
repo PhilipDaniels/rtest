@@ -1,5 +1,5 @@
 use crate::{
-    jobs::{Job, JobKind},
+    jobs::{JobKind, PendingJob},
     shadow_copy_destination::ShadowCopyDestination,
     source_directory_watcher::FileSyncEvent,
 };
@@ -15,8 +15,8 @@ pub struct FileSyncJob {
 impl Display for FileSyncJob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (s, pathbuf) = match &self.file_sync_event {
-            FileSyncEvent::FileUpdate(pb) => ("created/updated file", pb),
-            FileSyncEvent::Remove(pb) => ("deleted file or directory", pb),
+            FileSyncEvent::FileUpdate(path_buf) => ("created/updated file", path_buf),
+            FileSyncEvent::Remove(path_buf) => ("deleted file or directory", path_buf),
         };
 
         write!(f, "FileSync - {} {:?}", s, pathbuf)
@@ -29,7 +29,7 @@ impl FileSyncJob {
     pub fn new(
         destination_directory: ShadowCopyDestination,
         file_sync_event: FileSyncEvent,
-    ) -> Job {
+    ) -> PendingJob {
         assert!(
             destination_directory.is_copying(),
             "A FileSyncJob should not be constructed if we are not actually copying elsewhere"
@@ -41,7 +41,7 @@ impl FileSyncJob {
             succeeded: false,
         });
 
-        Job::new(kind)
+        kind.into()
     }
 
     pub fn succeeded(&self) -> bool {

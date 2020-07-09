@@ -1,8 +1,10 @@
 use crate::{
-    jobs::{Job, JobKind},
+    failed,
+    jobs::{JobKind, PendingJob},
     shadow_copy_destination::ShadowCopyDestination,
+    succeeded,
 };
-use log::{debug, info, warn};
+use log::info;
 use std::{
     fmt::Display,
     process::{Command, ExitStatus},
@@ -25,18 +27,16 @@ pub struct BuildJob {
 
 impl Display for BuildJob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Build")
+        write!(f, "Build in {:?} mode", self.build_mode)
     }
 }
-
-use crate::{failed, succeeded};
 
 impl BuildJob {
     pub fn succeeded(&self) -> bool {
         self.exit_status.map_or(false, |s| s.success())
     }
 
-    pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> Job {
+    pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> PendingJob {
         let kind = JobKind::Build(BuildJob {
             destination: destination_directory,
             build_mode,
@@ -45,7 +45,7 @@ impl BuildJob {
             stderr: Vec::default(),
         });
 
-        Job::new(kind)
+        kind.into()
     }
 
     pub fn execute(&mut self) {

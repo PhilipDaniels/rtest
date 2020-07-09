@@ -1,5 +1,5 @@
 use crate::{
-    jobs::{Job, JobKind},
+    jobs::{JobKind, PendingJob},
     shadow_copy_destination::ShadowCopyDestination,
 };
 use ignore::WalkBuilder;
@@ -19,7 +19,9 @@ impl Display for ShadowCopyJob {
             f,
             "Shadow copy from {:?} to {:?}",
             self.destination.source_directory(),
-            self.destination.destination_directory()
+            self.destination
+                .destination_directory()
+                .expect("Should always be Some because of `new` function")
         )
     }
 }
@@ -27,7 +29,7 @@ impl Display for ShadowCopyJob {
 impl ShadowCopyJob {
     /// Create a new shadow copy job to copy from the `source` directory
     /// to the `destination` directory.
-    pub fn new(destination_directory: ShadowCopyDestination) -> Job {
+    pub fn new(destination_directory: ShadowCopyDestination) -> PendingJob {
         assert!(
             destination_directory.is_copying(),
             "A ShadowCopyJob should not be constructed if we are not actually copying elsewhere"
@@ -39,7 +41,7 @@ impl ShadowCopyJob {
             succeeded: false,
         });
 
-        Job::new(kind)
+        kind.into()
     }
 
     pub fn succeeded(&self) -> bool {
@@ -68,6 +70,7 @@ impl ShadowCopyJob {
 
         // Even if 1 or more copies fail, we can still consider outself
         // to have succeeded.
+        // TODO: Get rid of this, return CompletionStatus from Execute().
         self.succeeded = true;
 
         info!("{} files copied", self.num_files_copied);
