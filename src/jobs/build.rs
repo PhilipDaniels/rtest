@@ -1,6 +1,6 @@
 use crate::{
     failed,
-    jobs::{JobKind, PendingJob},
+    jobs::{JobKind, PendingJob, CompletionStatus},
     shadow_copy_destination::ShadowCopyDestination,
     succeeded,
 };
@@ -48,7 +48,8 @@ impl BuildJob {
         kind.into()
     }
 
-    pub fn execute(&mut self) {
+    #[must_use = "Don't ignore the completion status, caller needs to store it"]
+    pub fn execute(&mut self) -> CompletionStatus {
         let cwd = if self.destination.is_copying() {
             let dir = self.destination.destination_directory().unwrap();
             info!("Building in shadow copy directory {}", dir.display());
@@ -77,8 +78,11 @@ impl BuildJob {
             succeeded!("`cargo build`. ExitStatus={:?}", self.exit_status);
             succeeded!("BUILD.stdout = {} bytes", self.stdout.len());
             succeeded!("BUILD.stderr = {} bytes", self.stderr.len());
+            CompletionStatus::Ok
         } else {
+            let msg = format!("`cargo build`. ExitStatus={:?}", self.exit_status);
             failed!("`cargo build`. ExitStatus={:?}", self.exit_status);
+            msg.into()
         }
     }
 }

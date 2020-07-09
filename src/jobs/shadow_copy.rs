@@ -1,3 +1,4 @@
+use super::CompletionStatus;
 use crate::{
     jobs::{JobKind, PendingJob},
     shadow_copy_destination::ShadowCopyDestination,
@@ -10,7 +11,6 @@ use std::fmt::Display;
 pub struct ShadowCopyJob {
     destination: ShadowCopyDestination,
     num_files_copied: usize,
-    succeeded: bool,
 }
 
 impl Display for ShadowCopyJob {
@@ -38,21 +38,16 @@ impl ShadowCopyJob {
         let kind = JobKind::ShadowCopy(ShadowCopyJob {
             destination: destination_directory,
             num_files_copied: 0,
-            succeeded: false,
         });
 
         kind.into()
     }
 
-    pub fn succeeded(&self) -> bool {
-        self.succeeded
-    }
-
-    pub fn execute(&mut self) {
+    #[must_use = "Don't ignore the completion status, caller needs to store it"]
+    pub fn execute(&mut self) -> CompletionStatus {
         let src = self.destination.source_directory();
         if !std::path::Path::is_dir(src) {
-            self.succeeded = false;
-            return;
+            return format!("Source directory {:?} is not a directory", src).into();
         }
 
         let walker = WalkBuilder::new(src).build();
@@ -70,9 +65,7 @@ impl ShadowCopyJob {
 
         // Even if 1 or more copies fail, we can still consider outself
         // to have succeeded.
-        // TODO: Get rid of this, return CompletionStatus from Execute().
-        self.succeeded = true;
-
         info!("{} files copied", self.num_files_copied);
+        CompletionStatus::Ok
     }
 }

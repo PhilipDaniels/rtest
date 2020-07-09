@@ -1,5 +1,5 @@
 use crate::{
-    jobs::{BuildJob, BuildMode, Job, JobKind, ShadowCopyJob, PendingJob, CompletedJob, ExecutingJob},
+    jobs::{BuildJob, BuildMode, Job, JobKind, ShadowCopyJob, PendingJob, CompletedJob, ExecutingJob, CompletionStatus},
     shadow_copy_destination::ShadowCopyDestination,
     thread_clutch::ThreadClutch,
 };
@@ -200,28 +200,20 @@ impl JobEngine {
         for job in job_exec_receiver {
             self.set_flags(&job);
 
-            let mut pending_jobs_lock = self.pending_jobs.lock().unwrap();
+            let pending_jobs_lock = self.pending_jobs.lock().unwrap();
+            let mut completed_jobs_lock = self.completed_jobs.lock().unwrap();
 
-            // Find this job by id in the list of pending jobs. It may not be there, if we
-            // 'tweaked' the job queue while this one was executing. But if we do
-            // find it, then remove it and add it to the list of completed jobs.
-            // If it's not found, just ignore it.
-            if let Some(index) = pending_jobs_lock.iter().position(|j| j.id() == job.id()) {
-                pending_jobs_lock.remove(index);
-                let pj_len = pending_jobs_lock.len();
+            let msg = format!(
+                "{} completed, there are now {} pending and {} completed jobs",
+                job,
+                pending_jobs_lock.len(),
+                completed_jobs_lock.len() + 1
+            );
 
-                let mut completed_jobs_lock = self.completed_jobs.lock().unwrap();
-                let msg = format!(
-                    "Completed {}, there are now {} pending and {} completed jobs",
-                    job,
-                    pj_len,
-                    completed_jobs_lock.len() + 1
-                );
-                completed_jobs_lock.push_back(job);
-                drop(completed_jobs_lock);
+            completed_jobs_lock.push_back(job);
+            drop(completed_jobs_lock);
 
-                info!("{}", msg);
-            }
+            info!("{}", msg);
 
             if pending_jobs_lock.is_empty() {
                 if self.build_required.load(Ordering::SeqCst) {
@@ -240,31 +232,24 @@ impl JobEngine {
         self.add_job_inner(job, pending_jobs_guard);
     }
 
-    /// Sets the various state flags based on the job.
+    fn set_build_required_flag(&self, value: bool) {
+        self.build_required.store(value, Ordering::SeqCst);
+    }
+
+    /// Sets the various state flags based on the job and its completion status.
     fn set_flags(&self, job: &CompletedJob) {
-        match job.kind() {
-            JobKind::ShadowCopy(shadow_copy_job) => {
-                if shadow_copy_job.succeeded() {
-                    self.build_required.store(true, Ordering::SeqCst);
-                } else {
-                    self.build_required.store(false, Ordering::SeqCst);
-                }
-            }
+        match (job.kind(), job.completion_status()) {
+            (JobKind::ShadowCopy(_), crate::jobs::CompletionStatus::Ok) => self.set_build_required_flag(true),
+            (JobKind::ShadowCopy(_), crate::jobs::CompletionStatus::Error(_)) => self.set_build_required_flag(false),
 
-            JobKind::FileSync(file_sync_job) => {
-                if file_sync_job.succeeded() {
-                    self.build_required.store(true, Ordering::SeqCst);
-                }
-            }
+            (JobKind::FileSync(_), crate::jobs::CompletionStatus::Ok) => self.set_build_required_flag(true),
+            (JobKind::FileSync(_), crate::jobs::CompletionStatus::Error(_)) => {}
 
-            JobKind::Build(build_job) => {
-                if build_job.succeeded() {
-                    self.build_required.store(false, Ordering::SeqCst);
-                } else {
-                    // TODO: This is a problem. Will rebuild infinitely.
-                    self.build_required.store(true, Ordering::SeqCst);
-                }
-            }
+            (JobKind::Build(_), crate::jobs::CompletionStatus::Ok) => self.set_build_required_flag(false),
+            // TODO: This is a problem. Will rebuild infinitely.
+            (JobKind::Build(_), crate::jobs::CompletionStatus::Error(_)) => self.set_build_required_flag(true),
+
+            (_, CompletionStatus::Unknown) => {}
         }
     }
 }

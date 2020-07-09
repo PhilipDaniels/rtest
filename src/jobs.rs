@@ -8,13 +8,13 @@ pub use shadow_copy::ShadowCopyJob;
 
 use chrono::{DateTime, Utc};
 use log::{info, warn};
-use logging_timer::{stimer, stime, Level, finish};
+use logging_timer::{finish, stimer, Level};
 use std::{
     fmt::{self, Display},
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-pub trait Job : Display {
+pub trait Job: Display {
     fn id(&self) -> &JobId;
     fn kind(&self) -> &JobKind;
 }
@@ -55,8 +55,8 @@ impl Job for PendingJob {
 impl PendingJob {
     pub fn execute(self) -> CompletedJob {
         let tmr = stimer!(Level::Info; "execute()", "{}", self.id);
-        let executing_job: ExecutingJob = self.into();
-        let status = CompletionStatus::Ok;
+        let mut executing_job: ExecutingJob = self.into();
+        let status = executing_job.kind.execute();
         finish!(tmr, "completed with status={:?}", status);
         CompletedJob::new(executing_job, status)
     }
@@ -135,16 +135,27 @@ impl CompletedJob {
         }
     }
 
+    pub fn completion_status(&self) -> CompletionStatus {
+        self.status.clone()
+    }
+
     pub fn succeeded(&self) -> bool {
-        todo!()
+        self.status == CompletionStatus::Ok
     }
 }
 
 /// Specifies the completion status of a Job.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompletionStatus {
+    Unknown,
     Ok,
     Error(String),
+}
+
+impl<S: Into<String>> From<S> for CompletionStatus {
+    fn from(msg: S) -> Self {
+        Self::Error(msg.into())
+    }
 }
 
 /// The `JobKind` specifies what type of job it is and the supporting data needed for that job.
@@ -153,8 +164,10 @@ pub enum JobKind {
     /// Perform a shadow copy from the first directory (the source) to
     /// the second directory (the destination)
     ShadowCopy(ShadowCopyJob),
+
     /// Perform a file sync (copy or delete) of a file.
     FileSync(FileSyncJob),
+
     /// Perform a build of the destination directory.
     Build(BuildJob),
 }
@@ -170,7 +183,8 @@ impl Display for JobKind {
 }
 
 impl JobKind {
-    fn execute(&mut self) {
+    #[must_use = "Don't ignore the completion status, caller needs to store it"]
+    fn execute(&mut self) -> CompletionStatus {
         match self {
             JobKind::ShadowCopy(shadow_copy_job) => shadow_copy_job.execute(),
             JobKind::FileSync(file_sync_job) => file_sync_job.execute(),
@@ -202,158 +216,6 @@ impl JobId {
         }
     }
 }
-
-
-
-
-
-
-// A Job is a short-lived unit of work that can be executed by the `JobEngine`.
-// n.b. All jobs have a unique identifier, which means they cannot be copied or cloned.
-// #[derive(Debug, Clone)]
-// pub struct Job {
-//     id: JobId,
-//     status: JobStatus,
-//     kind: JobKind,
-// }
-
-// impl Job {
-//     pub fn new(kind: JobKind) -> Self {
-//         let pending = Pending::new();
-//         let status = JobStatus::Pending(pending);
-
-//         Self {
-//             id: JobId::new(),
-//             status,
-//             kind,
-//         }
-//     }
-
-//     pub fn id(&self) -> &JobId {
-//         &self.id
-//     }
-
-//     /// Returns true if this is a pending job.
-//     pub fn is_pending(&self) -> bool {
-//         match self.status {
-//             JobStatus::Pending(_) => true,
-//             _ => false,
-//         }
-//     }
-
-//     pub fn kind(&self) -> &JobKind {
-//         &self.kind
-//     }
-
-//     #[stime]
-//     pub fn execute(&mut self) {
-//         info!("Executing {}", self);
-//         //self.status.begin_execution();
-//         self.kind.execute();
-//         self.status.complete_execution(CompletionStatus::Ok);
-//     }
-
-//     pub fn begin_execution(&mut self) {
-//         self.status.begin_execution();
-//     }
-// }
-
-// impl Display for Job {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "{} {}", self.id, self.kind)
-//     }
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// TBD
-
-
-// #[derive(Debug, Clone)]
-// pub struct Pending {
-//     creation_date: DateTime<Utc>,
-// }
-
-// impl Pending {
-//     pub fn new() -> Self {
-//         Self {
-//             creation_date: Utc::now(),
-//         }
-//     }
-// }
-
-// #[derive(Debug, Clone)]
-// pub struct Executing {
-//     creation_date: DateTime<Utc>,
-//     start_date: DateTime<Utc>,
-// }
-
-// impl Executing {
-//     fn new(pending: &Pending) -> Self {
-//         Self {
-//             creation_date: pending.creation_date,
-//             start_date: Utc::now(),
-//         }
-//     }
-// }
-
-// #[derive(Debug, Clone)]
-// pub struct Completed {
-//     creation_date: DateTime<Utc>,
-//     start_date: DateTime<Utc>,
-//     completed_date: DateTime<Utc>,
-//     status: CompletionStatus,
-// }
-
-// impl Completed {
-//     fn new(executing: &Executing, status: CompletionStatus) -> Self {
-//         Self {
-//             creation_date: executing.creation_date,
-//             start_date: executing.start_date,
-//             completed_date: Utc::now(),
-//             status,
-//         }
-//     }
-// }
-// #[derive(Debug, Clone)]
-// pub enum JobStatus {
-//     Pending(Pending),
-//     Executing(Executing),
-//     Completed(Completed),
-// }
-
-// impl JobStatus {
-//     fn begin_execution(&mut self) {
-//         match self {
-//             Self::Pending(pending) => {
-//                 *self = Self::Executing(Executing::new(pending));
-//             }
-//             _ => panic!("Bad state"),
-//         }
-//     }
-
-//     fn complete_execution(&mut self, status: CompletionStatus) {
-//         match self {
-//             Self::Executing(executing) => {
-//                 let completed = Completed::new(executing, status);
-//                 *self = Self::Completed(completed);
-//             }
-//             _ => panic!("Bad state"),
-//         }
-//     }
-// }
 
 fn job_succeeded(log_entry: fmt::Arguments) {
     info!("JOB SUCCEEDED: {}", log_entry);

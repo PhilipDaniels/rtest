@@ -1,3 +1,4 @@
+use super::CompletionStatus;
 use crate::{
     jobs::{JobKind, PendingJob},
     shadow_copy_destination::ShadowCopyDestination,
@@ -9,7 +10,6 @@ use std::fmt::Display;
 pub struct FileSyncJob {
     destination: ShadowCopyDestination,
     file_sync_event: FileSyncEvent,
-    succeeded: bool,
 }
 
 impl Display for FileSyncJob {
@@ -38,25 +38,32 @@ impl FileSyncJob {
         let kind = JobKind::FileSync(FileSyncJob {
             destination: destination_directory,
             file_sync_event,
-            succeeded: false,
         });
 
         kind.into()
     }
 
-    pub fn succeeded(&self) -> bool {
-        self.succeeded
-    }
-
-    pub fn execute(&mut self) {
+    #[must_use = "Don't ignore the completion status, caller needs to store it"]
+    pub fn execute(&mut self) -> CompletionStatus {
         match &self.file_sync_event {
             FileSyncEvent::FileUpdate(path) => {
                 if std::path::Path::is_file(path) {
-                    self.succeeded = self.destination.copy_file(path);
+                    if self.destination.copy_file(path) {
+                        CompletionStatus::Ok
+                    } else {
+                        format!("Copying file {:?} failed", path).into()
+                    }
+                } else {
+                    format!("The path {:?} is not a file", path).into()
                 }
             }
+
             FileSyncEvent::Remove(path) => {
-                self.succeeded = self.destination.remove_file_or_directory(path);
+                if self.destination.remove_file_or_directory(path) {
+                    CompletionStatus::Ok
+                } else {
+                    format!("Removing path {:?} failed", path).into()
+                }
             }
         }
     }
