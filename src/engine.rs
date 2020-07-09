@@ -179,7 +179,6 @@ impl JobEngine {
             self.job_starter_clutch.wait_for_release();
 
             if let Some(job) = self.get_next_job() {
-                info!("Got next job {:?}", job);
                 job_exec_sender
                     .send(job)
                     .expect("Could not send job to JOB_EXECUTOR thread");
@@ -199,11 +198,9 @@ impl JobEngine {
 
     fn run_job_completed_thread(&self, job_exec_receiver: Receiver<CompletedJob>) {
         for job in job_exec_receiver {
-            info!("Received job in run_job_completed_thread()");
             self.set_flags(&job);
 
             let mut pending_jobs_lock = self.pending_jobs.lock().unwrap();
-            info!("Acquired lock in run_job_completed_thread()");
 
             // Find this job by id in the list of pending jobs. It may not be there, if we
             // 'tweaked' the job queue while this one was executing. But if we do

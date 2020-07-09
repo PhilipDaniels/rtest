@@ -8,7 +8,7 @@ pub use shadow_copy::ShadowCopyJob;
 
 use chrono::{DateTime, Utc};
 use log::{info, warn};
-use logging_timer::{stimer, stime, Level};
+use logging_timer::{stimer, stime, Level, finish};
 use std::{
     fmt::{self, Display},
     sync::atomic::{AtomicUsize, Ordering},
@@ -54,9 +54,10 @@ impl Job for PendingJob {
 
 impl PendingJob {
     pub fn execute(self) -> CompletedJob {
-        let tmr = stimer!(Level::Info; "execute");
+        let tmr = stimer!(Level::Info; "execute()", "{}", self.id);
         let executing_job: ExecutingJob = self.into();
         let status = CompletionStatus::Ok;
+        finish!(tmr, "completed with status={:?}", status);
         CompletedJob::new(executing_job, status)
     }
 }
