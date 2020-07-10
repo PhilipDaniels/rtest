@@ -18,7 +18,6 @@ use std::thread;
   and each test is linked to a particular job. One job may be linked to
   several tests.
 * We need to support cancellation of jobs.
-* When a job finishes execution it may create N more jobs.
 
 Algorithm for adding file sync
 FOR SOME PATH P
@@ -27,7 +26,6 @@ If OP is REMOVE, remove all file copy jobs and create a remove job
 ELSE
     if there is a previous job for this file, remove it and insert a new COPY job (op is likely to be WRITE, CLOSE_WRITE, RENAME or CHMOD)
 
-Flag for 'is a build required'?
 */
 
 #[derive(Debug, Clone)]
@@ -53,7 +51,8 @@ pub struct JobEngine {
     /// there are no pending jobs).
     job_added_signal: Arc<Condvar>,
 
-    build_required: Arc<AtomicBool>,
+    build_required: BoolFlag,
+    test_required: BoolFlag,
 }
 
 impl JobEngine {
@@ -67,6 +66,7 @@ impl JobEngine {
             job_starter_clutch: Default::default(),
             job_added_signal: Default::default(),
             build_required: Default::default(),
+            test_required: Default::default(),
         };
 
         // Start the JOB_EXECUTOR thread. This thread picks jobs off the front
@@ -140,7 +140,7 @@ impl JobEngine {
                 info!("{}", msg);
 
                 if pending_jobs_lock.is_empty() {
-                    if self.build_required.load(Ordering::SeqCst) {
+                    if self.build_required.is_true() {
                         self.add_build_job(pending_jobs_lock);
                     }
                 }
@@ -185,34 +185,64 @@ impl JobEngine {
         self.job_added_signal.notify_all();
     }
 
-    fn set_build_required_flag(&self, value: bool) {
-        self.build_required.store(value, Ordering::SeqCst);
-    }
-
     /// Sets the various state flags based on the job and its completion status.
     fn set_flags(&self, job: &CompletedJob) {
         match (job.kind(), job.completion_status()) {
             (JobKind::ShadowCopy(_), crate::jobs::CompletionStatus::Ok) => {
-                self.set_build_required_flag(true)
+                self.build_required.set_true();
             }
             (JobKind::ShadowCopy(_), crate::jobs::CompletionStatus::Error(_)) => {
-                self.set_build_required_flag(false)
+                self.build_required.set_false();
             }
 
             (JobKind::FileSync(_), crate::jobs::CompletionStatus::Ok) => {
-                self.set_build_required_flag(true)
+                self.build_required.set_true();
             }
             (JobKind::FileSync(_), crate::jobs::CompletionStatus::Error(_)) => {}
 
             (JobKind::Build(_), crate::jobs::CompletionStatus::Ok) => {
-                self.set_build_required_flag(false)
+                self.build_required.set_false();
+                self.test_required.set_true();
             }
 
             (JobKind::Build(_), crate::jobs::CompletionStatus::Error(_)) => {
-                self.set_build_required_flag(false)
+                self.build_required.set_false();
             }
 
             (_, CompletionStatus::Unknown) => {}
         }
+    }
+}
+
+/// Atomic reference counted bool flag.
+/// It is safe to use and call this from multiple threads.
+#[derive(Debug, Default, Clone)]
+struct BoolFlag {
+    flag: Arc<AtomicBool>,
+}
+
+impl BoolFlag {
+    fn is_true(&self) -> bool {
+        self.flag.load(Ordering::SeqCst)
+    }
+
+    fn is_false(&self) -> bool {
+        !self.is_true()
+    }
+
+    fn get(&self, value: bool) -> bool {
+        self.flag.load(Ordering::SeqCst)
+    }
+
+    fn set(&self, value: bool) {
+        self.flag.store(value, Ordering::SeqCst);
+    }
+
+    fn set_true(&self) {
+        self.set(true);
+    }
+
+    fn set_false(&self) {
+        self.set(false);
     }
 }
