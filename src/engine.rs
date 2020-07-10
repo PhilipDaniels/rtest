@@ -204,9 +204,9 @@ impl JobEngine {
             (JobKind::Build(_), crate::jobs::CompletionStatus::Ok) => {
                 self.set_build_required_flag(false)
             }
-            // TODO: This is a problem. Will rebuild infinitely.
+
             (JobKind::Build(_), crate::jobs::CompletionStatus::Error(_)) => {
-                self.set_build_required_flag(true)
+                self.set_build_required_flag(false)
             }
 
             (_, CompletionStatus::Unknown) => {}
