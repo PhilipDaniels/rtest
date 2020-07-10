@@ -1,10 +1,12 @@
 mod build;
 mod file_sync;
+mod run_test;
 mod shadow_copy;
 
 pub use build::{BuildJob, BuildMode};
 pub use file_sync::FileSyncJob;
 pub use shadow_copy::ShadowCopyJob;
+pub use run_test::TestJob;
 
 use chrono::{DateTime, Utc};
 use log::{info, warn};
@@ -170,6 +172,8 @@ pub enum JobKind {
 
     /// Perform a build of the destination directory.
     Build(BuildJob),
+
+    Test(TestJob),
 }
 
 impl Display for JobKind {
@@ -178,6 +182,7 @@ impl Display for JobKind {
             JobKind::ShadowCopy(shadow_copy_job) => shadow_copy_job.fmt(f),
             JobKind::FileSync(file_sync_job) => file_sync_job.fmt(f),
             JobKind::Build(build_job) => build_job.fmt(f),
+            JobKind::Test(test_job) => test_job.fmt(f),
         }
     }
 }
@@ -189,6 +194,7 @@ impl JobKind {
             JobKind::ShadowCopy(shadow_copy_job) => shadow_copy_job.execute(),
             JobKind::FileSync(file_sync_job) => file_sync_job.execute(),
             JobKind::Build(build_job) => build_job.execute(),
+            JobKind::Test(test_job) => test_job.execute(),
         }
     }
 }

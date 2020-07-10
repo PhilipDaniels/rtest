@@ -1,5 +1,5 @@
 use crate::{
-    jobs::{BuildJob, BuildMode, CompletedJob, CompletionStatus, Job, JobKind, PendingJob},
+    jobs::{BuildJob, BuildMode, CompletedJob, CompletionStatus, Job, JobKind, PendingJob, TestJob},
     shadow_copy_destination::ShadowCopyDestination,
     thread_clutch::ThreadClutch,
 };
@@ -141,7 +141,12 @@ impl JobEngine {
 
                 if pending_jobs_lock.is_empty() {
                     if self.build_required.is_true() {
-                        self.add_build_job(pending_jobs_lock);
+                        //self.add_build_job(pending_jobs_lock);
+                        let job = BuildJob::new(self.dest_dir.clone(), BuildMode::Debug);
+                        self.add_job_inner(job, pending_jobs_lock);
+                    } else if self.test_required.is_true() {
+                        let job = TestJob::new(self.dest_dir.clone(), BuildMode::Debug);
+                        self.add_job_inner(job, pending_jobs_lock);
                     }
                 }
             } else {
@@ -162,10 +167,10 @@ impl JobEngine {
     /// TODO: In the future this might be more sophisticated, for example checking to see
     /// if there is an existing build job already in the pipeline and moving it to the end (if it's
     /// not already running, that is).
-    fn add_build_job(&self, pending_jobs_guard: MutexGuard<VecDeque<PendingJob>>) {
-        let job = BuildJob::new(self.dest_dir.clone(), BuildMode::Debug);
-        self.add_job_inner(job, pending_jobs_guard);
-    }
+    // fn add_build_job(&self, pending_jobs_guard: MutexGuard<VecDeque<PendingJob>>) {
+    //     let job = BuildJob::new(self.dest_dir.clone(), BuildMode::Debug);
+    //     self.add_job_inner(job, pending_jobs_guard);
+    // }
 
     fn add_job_inner(
         &self,
@@ -206,7 +211,17 @@ impl JobEngine {
             }
 
             (JobKind::Build(_), crate::jobs::CompletionStatus::Error(_)) => {
+                // To prevent recursion, we need to wait till we get another file copy.
                 self.build_required.set_false();
+            }
+
+            (JobKind::Test(_), crate::jobs::CompletionStatus::Ok) => {
+                self.test_required.set_false();
+            }
+
+            (JobKind::Test(_), crate::jobs::CompletionStatus::Error(_)) => {
+                // To prevent recursion, we need to wait till we get another file copy.
+                self.test_required.set_false();
             }
 
             (_, CompletionStatus::Unknown) => {}

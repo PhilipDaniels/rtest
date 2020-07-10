@@ -9,15 +9,10 @@ use std::{
     fmt::Display,
     process::{Command, ExitStatus},
 };
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BuildMode {
-    Debug,
-    Release,
-}
+use super::BuildMode;
 
 #[derive(Debug, Clone)]
-pub struct BuildJob {
+pub struct TestJob {
     destination: ShadowCopyDestination,
     build_mode: BuildMode,
     exit_status: Option<ExitStatus>,
@@ -25,15 +20,15 @@ pub struct BuildJob {
     stderr: Vec<u8>,
 }
 
-impl Display for BuildJob {
+impl Display for TestJob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Build in {:?} mode", self.build_mode)
+        write!(f, "Run tests in {:?} mode", self.build_mode)
     }
 }
 
-impl BuildJob {
+impl TestJob {
     pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> PendingJob {
-        let kind = JobKind::Build(BuildJob {
+        let kind = JobKind::Test(TestJob {
             destination: destination_directory,
             build_mode,
             exit_status: None,
@@ -48,11 +43,11 @@ impl BuildJob {
     pub fn execute(&mut self) -> CompletionStatus {
         let cwd = if self.destination.is_copying() {
             let dir = self.destination.destination_directory().unwrap();
-            info!("Building in shadow copy directory {}", dir.display());
+            info!("Testing in shadow copy directory {}", dir.display());
             dir
         } else {
             let dir = self.destination.source_directory();
-            info!("Building in the original directory {}", dir.display());
+            info!("Testing in the original directory {}", dir.display());
             dir
         };
 
@@ -60,26 +55,25 @@ impl BuildJob {
         // actually run the tests.
         let mut command = Command::new("cargo");
         command.arg("test");
-        command.arg("--no-run");
         command.current_dir(cwd);
         command.env("RUST_BACKTRACE", "1");
         command.env("RUSTC_WRAPPER", "sccache");
 
         let output = command
             .output()
-            .expect("`cargo build` command failed to start");
+            .expect("`cargo test` command failed to start");
 
         self.exit_status = Some(output.status);
         self.stdout = output.stdout;
         self.stderr = output.stderr;
 
+        // TODO: Function to tidy up these messages. Use in build also.
+        // TODO: Tidy up all job-related messages.
         if output.status.success() {
-            succeeded!("`cargo build`. ExitStatus={:?}", self.exit_status);
-            succeeded!("BUILD.stdout = {} bytes", self.stdout.len());
-            succeeded!("BUILD.stderr = {} bytes", self.stderr.len());
+            succeeded!("`cargo test`. ExitStatus={:?}, stdout = {} bytes, stderr = {} bytes", self.exit_status, self.stdout.len(), self.stderr.len());
             CompletionStatus::Ok
         } else {
-            let msg = format!("`cargo build`. ExitStatus={:?}", self.exit_status);
+            let msg = format!("`cargo test`. ExitStatus={:?}", self.exit_status);
             failed!("`cargo build`. ExitStatus={:?}", self.exit_status);
             msg.into()
         }
