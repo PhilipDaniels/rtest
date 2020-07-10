@@ -60,8 +60,11 @@ impl BuildJob {
             dir
         };
 
+        // This will build both the main code and the test code, but won't
+        // actually run the tests.
         let mut command = Command::new("cargo");
-        command.arg("build");
+        command.arg("test");
+        command.arg("--no-run");
         command.current_dir(cwd);
         command.env("RUST_BACKTRACE", "1");
         command.env("RUSTC_WRAPPER", "");
