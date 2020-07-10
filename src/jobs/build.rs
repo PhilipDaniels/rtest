@@ -1,6 +1,6 @@
 use crate::{
     failed,
-    jobs::{JobKind, PendingJob, CompletionStatus},
+    jobs::{CompletionStatus, JobKind, PendingJob},
     shadow_copy_destination::ShadowCopyDestination,
     succeeded,
 };
@@ -32,10 +32,6 @@ impl Display for BuildJob {
 }
 
 impl BuildJob {
-    pub fn succeeded(&self) -> bool {
-        self.exit_status.map_or(false, |s| s.success())
-    }
-
     pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> PendingJob {
         let kind = JobKind::Build(BuildJob {
             destination: destination_directory,

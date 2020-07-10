@@ -114,11 +114,11 @@ impl JobEngine {
 
             // Do we have a job to execute?
             if let Some(job) = self.get_next_job() {
-                //                self.executing_job = Some(job.clone());
+                let mut executing_job_guard = self.executing_job.lock().unwrap();
+                *executing_job_guard = Some(job.clone());
                 // This is potentially time consuming, everything else in this
                 // method should be fast (hence the locks will be released quickly).
                 let completed_job = job.execute();
-                //                self.executing_job = None;
 
                 self.set_flags(&completed_job);
                 let pending_jobs_lock = self.pending_jobs.lock().unwrap();
@@ -133,6 +133,9 @@ impl JobEngine {
 
                 completed_jobs_lock.push_back(completed_job);
                 drop(completed_jobs_lock);
+
+                *executing_job_guard = None;
+                drop(executing_job_guard);
 
                 info!("{}", msg);
 
