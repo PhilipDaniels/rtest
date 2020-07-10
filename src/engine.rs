@@ -141,7 +141,6 @@ impl JobEngine {
 
                 if pending_jobs_lock.is_empty() {
                     if self.build_required.is_true() {
-                        //self.add_build_job(pending_jobs_lock);
                         let job = BuildJob::new(self.dest_dir.clone(), BuildMode::Debug);
                         self.add_job_inner(job, pending_jobs_lock);
                     } else if self.test_required.is_true() {

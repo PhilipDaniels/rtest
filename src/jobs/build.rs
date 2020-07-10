@@ -1,10 +1,9 @@
+use super::JobId;
 use crate::{
-    failed,
     jobs::{CompletionStatus, JobKind, PendingJob},
     shadow_copy_destination::ShadowCopyDestination,
-    succeeded,
 };
-use log::info;
+use log::{info, warn};
 use std::{
     fmt::Display,
     process::{Command, ExitStatus},
@@ -45,14 +44,22 @@ impl BuildJob {
     }
 
     #[must_use = "Don't ignore the completion status, caller needs to store it"]
-    pub fn execute(&mut self) -> CompletionStatus {
+    pub fn execute(&mut self, parent_job_id: JobId) -> CompletionStatus {
         let cwd = if self.destination.is_copying() {
             let dir = self.destination.destination_directory().unwrap();
-            info!("Building in shadow copy directory {}", dir.display());
+            info!(
+                "{} Building in shadow copy directory {}",
+                parent_job_id,
+                dir.display()
+            );
             dir
         } else {
             let dir = self.destination.source_directory();
-            info!("Building in the original directory {}", dir.display());
+            info!(
+                "{} Building in the original directory {}",
+                parent_job_id,
+                dir.display()
+            );
             dir
         };
 
@@ -62,25 +69,31 @@ impl BuildJob {
         command.arg("test");
         command.arg("--no-run");
         command.current_dir(cwd);
-        command.env("RUST_BACKTRACE", "1");
-        command.env("RUSTC_WRAPPER", "sccache");
 
-        let output = command
-            .output()
-            .expect("`cargo build` command failed to start");
+        let output = command.output().expect("Build command failed to start");
 
         self.exit_status = Some(output.status);
         self.stdout = output.stdout;
         self.stderr = output.stderr;
 
+        let msg = format!(
+            "{} Build {}. ExitStatus={:?}, stdout={} bytes, stderr={} bytes",
+            parent_job_id,
+            if output.status.success() {
+                "succeeded"
+            } else {
+                "failed"
+            },
+            self.exit_status,
+            self.stdout.len(),
+            self.stderr.len()
+        );
+
         if output.status.success() {
-            succeeded!("`cargo build`. ExitStatus={:?}", self.exit_status);
-            succeeded!("BUILD.stdout = {} bytes", self.stdout.len());
-            succeeded!("BUILD.stderr = {} bytes", self.stderr.len());
+            info!("{}", msg);
             CompletionStatus::Ok
         } else {
-            let msg = format!("`cargo build`. ExitStatus={:?}", self.exit_status);
-            failed!("`cargo build`. ExitStatus={:?}", self.exit_status);
+            warn!("{}", msg);
             msg.into()
         }
     }

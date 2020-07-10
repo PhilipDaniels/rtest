@@ -5,14 +5,13 @@ mod shadow_copy;
 
 pub use build::{BuildJob, BuildMode};
 pub use file_sync::FileSyncJob;
-pub use shadow_copy::ShadowCopyJob;
 pub use run_test::TestJob;
+pub use shadow_copy::ShadowCopyJob;
 
 use chrono::{DateTime, Utc};
-use log::{info, warn};
 use logging_timer::{finish, stimer, Level};
 use std::{
-    fmt::{self, Display},
+    fmt::Display,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -58,7 +57,7 @@ impl PendingJob {
     pub fn execute(self) -> CompletedJob {
         let tmr = stimer!(Level::Info; "execute()", "{}", self.id);
         let mut executing_job: ExecutingJob = self.into();
-        let status = executing_job.kind.execute();
+        let status = executing_job.execute();
         finish!(tmr, "completed with status={:?}", status);
         CompletedJob::new(executing_job, status)
     }
@@ -96,6 +95,13 @@ impl Job for ExecutingJob {
 
     fn kind(&self) -> &JobKind {
         &self.kind
+    }
+}
+
+impl ExecutingJob {
+    fn execute(&mut self) -> CompletionStatus {
+        let status = self.kind.execute(self.id().clone());
+        status
     }
 }
 
@@ -189,19 +195,19 @@ impl Display for JobKind {
 
 impl JobKind {
     #[must_use = "Don't ignore the completion status, caller needs to store it"]
-    fn execute(&mut self) -> CompletionStatus {
+    fn execute(&mut self, parent: JobId) -> CompletionStatus {
         match self {
             JobKind::ShadowCopy(shadow_copy_job) => shadow_copy_job.execute(),
             JobKind::FileSync(file_sync_job) => file_sync_job.execute(),
-            JobKind::Build(build_job) => build_job.execute(),
-            JobKind::Test(test_job) => test_job.execute(),
+            JobKind::Build(build_job) => build_job.execute(parent),
+            JobKind::Test(test_job) => test_job.execute(parent),
         }
     }
 }
 
 /// Every Job has a unique id.
-/// Note that cloning theoretically creates a duplicate Id. In practice, this is only done
-/// inside the engine when it is executing the job so it's safe.
+/// Note that cloning theoretically creates a duplicate Id. In practice, this only happens
+/// inside the engine when it is executing the job.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JobId {
     id: usize,
@@ -221,26 +227,4 @@ impl JobId {
             id: ID.fetch_add(1, Ordering::SeqCst),
         }
     }
-}
-
-fn job_succeeded(log_entry: fmt::Arguments) {
-    info!("JOB SUCCEEDED: {}", log_entry);
-}
-
-fn job_failed(log_entry: fmt::Arguments) {
-    warn!("JOB FAILED: {}", log_entry);
-}
-
-#[macro_export]
-macro_rules! succeeded {
-   ($format:tt, $($arg:expr),*) => (
-       crate::jobs::job_succeeded(format_args!($format, $($arg),*))
-   )
-}
-
-#[macro_export]
-macro_rules! failed {
-   ($format:tt, $($arg:expr),*) => (
-       crate::jobs::job_failed(format_args!($format, $($arg),*))
-   )
 }
