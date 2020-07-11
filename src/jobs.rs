@@ -1,9 +1,9 @@
-mod build;
+mod build_tests;
 mod file_sync;
 mod run_test;
 mod shadow_copy;
 
-pub use build::{BuildJob, BuildMode};
+pub use build_tests::BuildTestsJob;
 pub use file_sync::FileSyncJob;
 pub use run_test::TestJob;
 pub use shadow_copy::ShadowCopyJob;
@@ -14,6 +14,13 @@ use std::{
     fmt::Display,
     sync::atomic::{AtomicUsize, Ordering},
 };
+
+/// The build mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildMode {
+    Debug,
+    Release,
+}
 
 pub trait Job: Display {
     fn id(&self) -> &JobId;
@@ -177,7 +184,7 @@ pub enum JobKind {
     FileSync(FileSyncJob),
 
     /// Perform a build of the destination directory.
-    Build(BuildJob),
+    Build(BuildTestsJob),
 
     Test(TestJob),
 }

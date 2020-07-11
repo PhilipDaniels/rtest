@@ -1,6 +1,5 @@
-use super::JobId;
 use crate::{
-    jobs::{CompletionStatus, JobKind, PendingJob},
+    jobs::{BuildMode, CompletionStatus, JobId, JobKind, PendingJob},
     shadow_copy_destination::ShadowCopyDestination,
 };
 use log::{info, warn};
@@ -9,14 +8,11 @@ use std::{
     process::{Command, ExitStatus},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BuildMode {
-    Debug,
-    Release,
-}
-
+/// Builds the tests **only**. This will fail if there is a compilation error in the main (non-test)
+/// code. The difference from `cargo build` is that it doesn't build the final crate target (such
+/// as an EXE for a bin crate). Some time is therefore saved on linking.
 #[derive(Debug, Clone)]
-pub struct BuildJob {
+pub struct BuildTestsJob {
     destination: ShadowCopyDestination,
     build_mode: BuildMode,
     exit_status: Option<ExitStatus>,
@@ -24,15 +20,15 @@ pub struct BuildJob {
     stderr: Vec<u8>,
 }
 
-impl Display for BuildJob {
+impl Display for BuildTestsJob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Build in {:?} mode", self.build_mode)
     }
 }
 
-impl BuildJob {
+impl BuildTestsJob {
     pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> PendingJob {
-        let kind = JobKind::Build(BuildJob {
+        let kind = JobKind::Build(BuildTestsJob {
             destination: destination_directory,
             build_mode,
             exit_status: None,
@@ -66,9 +62,15 @@ impl BuildJob {
         // This will build both the main code and the test code, but won't
         // actually run the tests.
         let mut command = Command::new("cargo");
+        command.current_dir(cwd);
+
         command.arg("test");
         command.arg("--no-run");
-        command.current_dir(cwd);
+        command.arg("--color");
+        command.arg("never");
+        if self.build_mode == BuildMode::Release {
+            command.arg("--release");
+        }
 
         let output = command.output().expect("Build command failed to start");
 

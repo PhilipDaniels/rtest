@@ -85,3 +85,7 @@ A testing GUI for Rust.
   - [ ] The widgets, can go into Druid eventually
   - [ ] The core module, design as a library to allow multiple front-ends, e.g. a TUI one.
   - [ ] A graphing widget/library, similar to d3.js?
+
+
+It is possible to link against cargo as a crate: https://github.com/roblabla/cargo-travis
+But this has downsides (see the README above) and https://users.rust-lang.org/t/how-stable-is-cargos-message-format-json/15662

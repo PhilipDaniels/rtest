@@ -14,7 +14,7 @@ mod ui;
 mod utils;
 
 use engine::JobEngine;
-use jobs::{BuildJob, BuildMode, FileSyncJob, ShadowCopyJob};
+use jobs::{FileSyncJob, ShadowCopyJob};
 use shadow_copy_destination::ShadowCopyDestination;
 use source_directory_watcher::FileSyncEvent;
 use ui::build_main_window;

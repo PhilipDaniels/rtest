@@ -1,5 +1,5 @@
 use crate::{
-    jobs::{BuildJob, BuildMode, CompletedJob, CompletionStatus, Job, JobKind, PendingJob, TestJob},
+    jobs::{BuildTestsJob, BuildMode, CompletedJob, CompletionStatus, Job, JobKind, PendingJob, TestJob},
     shadow_copy_destination::ShadowCopyDestination,
     thread_clutch::ThreadClutch,
 };
@@ -141,7 +141,7 @@ impl JobEngine {
 
                 if pending_jobs_lock.is_empty() {
                     if self.build_required.is_true() {
-                        let job = BuildJob::new(self.dest_dir.clone(), BuildMode::Debug);
+                        let job = BuildTestsJob::new(self.dest_dir.clone(), BuildMode::Debug);
                         self.add_job_inner(job, pending_jobs_lock);
                     } else if self.test_required.is_true() {
                         let job = TestJob::new(self.dest_dir.clone(), BuildMode::Debug);
