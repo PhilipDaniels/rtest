@@ -1,34 +1,20 @@
-[package]
-name = "rtest"
-version = "0.1.0"
-authors = ["Philip Daniels <Philip.Daniels1971@gmail.com>"]
-edition = "2018"
+[workspace]
+members = [
+    "rtest",
+    "cargo_test_parser",
+    "example_lib_tests",
+    "example_bin_tests"
+]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# [profile.dev]
+# opt-level = 1
 
-[dependencies]
-chrono = { version = "0.4", features = ["serde"] }
-clap = "3.0.0-beta.1"
-druid = "0.6.0"
-env_logger = "0.7"
-ignore = "0.4"
-log = "0.4"
-logging_timer = "1.0.0"
-remove_dir_all = "0.5.3"
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-tempfile = "3.1"
-watchexec = "1.14.0"
+# [profile.dev.package."*"]
+# # Compile all dependencies in opt-level 3.
+# opt-level = 3
 
-[profile.dev]
-opt-level = 1
-
-[profile.dev.package."*"]
-# Compile all dependencies in opt-level 3.
-opt-level = 3
-
-[profile.release]
-lto = "fat"
-codegen-units = 1
-# "s" means optimize for size, "z" reduces size even more.
-opt-level = 3
+# [profile.release]
+# lto = "fat"
+# codegen-units = 1
+# # "s" means optimize for size, "z" reduces size even more.
+# opt-level = 3
