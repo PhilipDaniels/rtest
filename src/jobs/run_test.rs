@@ -92,3 +92,30 @@ impl TestJob {
         }
     }
 }
+
+/*
+For normal channels, the best we can do is:
+
+running 2 tests
+test tests::test1_passing ... ok
+test tests::test2_failing ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+
+
+For nightly channels, we can do:
+    rustup run nightly cargo test -- -Z unstable-options --format=json
+    cargo +nightly test -- -Z unstable-options --format=json
+which results in
+
+{ "type": "suite", "event": "started", "test_count": 2 }
+{ "type": "test", "event": "started", "name": "tests::test1_passing" }
+{ "type": "test", "event": "started", "name": "tests::test2_failing" }
+{ "type": "test", "name": "tests::test1_passing", "event": "ok" }
+{ "type": "test", "name": "tests::test2_failing", "event": "ok" }
+{ "type": "suite", "event": "ok", "passed": 2, "failed": 0, "allowed_fail": 0, "ignored": 0, "measured": 0, "filtered_out": 0 }
+
+See libtest in rustlang
+
+*/
