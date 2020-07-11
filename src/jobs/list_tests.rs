@@ -16,6 +16,7 @@ pub struct ListTestsJob {
     exit_status: Option<ExitStatus>,
     stdout: Vec<u8>,
     stderr: Vec<u8>,
+    tests: Vec<String>,
 }
 
 impl Display for ListTestsJob {
@@ -30,8 +31,9 @@ impl ListTestsJob {
             destination: destination_directory,
             build_mode,
             exit_status: None,
-            stdout: Vec::default(),
-            stderr: Vec::default(),
+            stdout: Default::default(),
+            stderr: Default::default(),
+            tests: Default::default(),
         });
 
         kind.into()
@@ -76,6 +78,7 @@ impl ListTestsJob {
         self.exit_status = Some(output.status);
         self.stdout = output.stdout;
         self.stderr = output.stderr;
+        self.tests = Self::parse_tests(&self.stdout);
 
         let msg = format!(
             "{} List tests {}. ExitStatus={:?}, stdout={} bytes, stderr={} bytes",
@@ -97,5 +100,9 @@ impl ListTestsJob {
             warn!("{}", msg);
             msg.into()
         }
+    }
+
+    fn parse_tests(stdout: &[u8]) -> Vec<String> {
+        vec![]
     }
 }
