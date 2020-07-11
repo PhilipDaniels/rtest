@@ -18,7 +18,7 @@ remove_dir_all = "0.5.3"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 tempfile = "3.1"
-watchexec = { git = "https://github.com/PhilipDaniels/watchexec", branch = "main" }
+watchexec = "1.14.0"
 
 [profile.dev]
 opt-level = 1
