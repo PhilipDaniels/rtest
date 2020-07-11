@@ -10,7 +10,7 @@ use std::{
 };
 
 #[derive(Debug, Clone)]
-pub struct TestJob {
+pub struct RunTestsJob {
     destination: ShadowCopyDestination,
     build_mode: BuildMode,
     exit_status: Option<ExitStatus>,
@@ -18,15 +18,15 @@ pub struct TestJob {
     stderr: Vec<u8>,
 }
 
-impl Display for TestJob {
+impl Display for RunTestsJob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Run tests in {:?} mode", self.build_mode)
     }
 }
 
-impl TestJob {
+impl RunTestsJob {
     pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> PendingJob {
-        let kind = JobKind::Test(TestJob {
+        let kind = JobKind::RunTests(RunTestsJob {
             destination: destination_directory,
             build_mode,
             exit_status: None,
@@ -57,6 +57,7 @@ impl TestJob {
             dir
         };
 
+        // cargo test --no-fail-fast -- --show-output --test-threads=1 --color never
         let mut command = Command::new("cargo");
         command.arg("test");
         command.current_dir(cwd);

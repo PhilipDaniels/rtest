@@ -8,11 +8,9 @@ use std::{
     process::{Command, ExitStatus},
 };
 
-/// Builds the tests **only**. This will fail if there is a compilation error in the main (non-test)
-/// code. The difference from `cargo build` is that it doesn't build the final crate target (such
-/// as an EXE for a bin crate). Some time is therefore saved on linking.
+/// Lists the tests. Does not run any of them.
 #[derive(Debug, Clone)]
-pub struct BuildTestsJob {
+pub struct ListTestsJob {
     destination: ShadowCopyDestination,
     build_mode: BuildMode,
     exit_status: Option<ExitStatus>,
@@ -20,15 +18,15 @@ pub struct BuildTestsJob {
     stderr: Vec<u8>,
 }
 
-impl Display for BuildTestsJob {
+impl Display for ListTestsJob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Build tests in {:?} mode", self.build_mode)
+        write!(f, "List tests in {:?} mode", self.build_mode)
     }
 }
 
-impl BuildTestsJob {
+impl ListTestsJob {
     pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> PendingJob {
-        let kind = JobKind::BuildTests(BuildTestsJob {
+        let kind = JobKind::ListTests(ListTestsJob {
             destination: destination_directory,
             build_mode,
             exit_status: None,
@@ -44,7 +42,7 @@ impl BuildTestsJob {
         let cwd = if self.destination.is_copying() {
             let dir = self.destination.destination_directory().unwrap();
             info!(
-                "{} Building test in shadow copy directory {}",
+                "{} Listing tests in shadow copy directory {}",
                 parent_job_id,
                 dir.display()
             );
@@ -52,34 +50,35 @@ impl BuildTestsJob {
         } else {
             let dir = self.destination.source_directory();
             info!(
-                "{} Building tests in the original directory {}",
+                "{} Listing tests in the original directory {}",
                 parent_job_id,
                 dir.display()
             );
             dir
         };
 
-        // This will build both the main code and the test code, but won't
-        // actually run the tests.
+        // cargo test -q -- --list
         let mut command = Command::new("cargo");
         command.current_dir(cwd);
 
         command.arg("test");
-        command.arg("--no-run");
-        command.arg("--color");
-        command.arg("never");
+        command.arg("-q");
         if self.build_mode == BuildMode::Release {
             command.arg("--release");
         }
+        command.arg("--");
+        command.arg("--list");
 
-        let output = command.output().expect("Build tests command failed to start");
+        let output = command
+            .output()
+            .expect("List tests command failed to start");
 
         self.exit_status = Some(output.status);
         self.stdout = output.stdout;
         self.stderr = output.stderr;
 
         let msg = format!(
-            "{} Build tests {}. ExitStatus={:?}, stdout={} bytes, stderr={} bytes",
+            "{} List tests {}. ExitStatus={:?}, stdout={} bytes, stderr={} bytes",
             parent_job_id,
             if output.status.success() {
                 "succeeded"

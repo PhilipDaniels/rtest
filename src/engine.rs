@@ -1,5 +1,8 @@
 use crate::{
-    jobs::{BuildTestsJob, BuildMode, CompletedJob, CompletionStatus, Job, JobKind, PendingJob, TestJob},
+    jobs::{
+        BuildMode, BuildTestsJob, CompletedJob, CompletionStatus, Job, JobKind, ListTestsJob,
+        PendingJob, RunTestsJob,
+    },
     shadow_copy_destination::ShadowCopyDestination,
     thread_clutch::ThreadClutch,
 };
@@ -51,8 +54,9 @@ pub struct JobEngine {
     /// there are no pending jobs).
     job_added_signal: Arc<Condvar>,
 
-    build_required: BoolFlag,
-    test_required: BoolFlag,
+    build_tests_required: BoolFlag,
+    list_tests_required: BoolFlag,
+    run_tests_required: BoolFlag,
 }
 
 impl JobEngine {
@@ -65,8 +69,9 @@ impl JobEngine {
             completed_jobs: Default::default(),
             job_starter_clutch: Default::default(),
             job_added_signal: Default::default(),
-            build_required: Default::default(),
-            test_required: Default::default(),
+            build_tests_required: Default::default(),
+            list_tests_required: Default::default(),
+            run_tests_required: Default::default(),
         };
 
         // Start the JOB_EXECUTOR thread. This thread picks jobs off the front
@@ -139,12 +144,18 @@ impl JobEngine {
 
                 info!("{}", msg);
 
+                // TODO: Pull this from config.
+                let build_mode = BuildMode::Debug;
+
                 if pending_jobs_lock.is_empty() {
-                    if self.build_required.is_true() {
-                        let job = BuildTestsJob::new(self.dest_dir.clone(), BuildMode::Debug);
+                    if self.build_tests_required.is_true() {
+                        let job = BuildTestsJob::new(self.dest_dir.clone(), build_mode);
                         self.add_job_inner(job, pending_jobs_lock);
-                    } else if self.test_required.is_true() {
-                        let job = TestJob::new(self.dest_dir.clone(), BuildMode::Debug);
+                    } else if self.list_tests_required.is_true() {
+                        let job = ListTestsJob::new(self.dest_dir.clone(), build_mode);
+                        self.add_job_inner(job, pending_jobs_lock);
+                    } else if self.run_tests_required.is_true() {
+                        let job = RunTestsJob::new(self.dest_dir.clone(), build_mode);
                         self.add_job_inner(job, pending_jobs_lock);
                     }
                 }
@@ -192,35 +203,42 @@ impl JobEngine {
     /// Sets the various state flags based on the job and its completion status.
     fn set_flags(&self, job: &CompletedJob) {
         match (job.kind(), job.completion_status()) {
-            (JobKind::ShadowCopy(_), crate::jobs::CompletionStatus::Ok) => {
-                self.build_required.set_true();
+            (JobKind::ShadowCopy(_), CompletionStatus::Ok) => {
+                self.build_tests_required.set_true();
             }
-            (JobKind::ShadowCopy(_), crate::jobs::CompletionStatus::Error(_)) => {
-                self.build_required.set_false();
-            }
-
-            (JobKind::FileSync(_), crate::jobs::CompletionStatus::Ok) => {
-                self.build_required.set_true();
-            }
-            (JobKind::FileSync(_), crate::jobs::CompletionStatus::Error(_)) => {}
-
-            (JobKind::Build(_), crate::jobs::CompletionStatus::Ok) => {
-                self.build_required.set_false();
-                self.test_required.set_true();
+            (JobKind::ShadowCopy(_), CompletionStatus::Error(_)) => {
+                self.build_tests_required.set_false();
             }
 
-            (JobKind::Build(_), crate::jobs::CompletionStatus::Error(_)) => {
+            (JobKind::FileSync(_), CompletionStatus::Ok) => {
+                self.build_tests_required.set_true();
+            }
+            (JobKind::FileSync(_), CompletionStatus::Error(_)) => {}
+
+            (JobKind::BuildTests(_), CompletionStatus::Ok) => {
+                self.build_tests_required.set_false();
+                self.list_tests_required.set_true();
+            }
+            (JobKind::BuildTests(_), CompletionStatus::Error(_)) => {
                 // To prevent recursion, we need to wait till we get another file copy.
-                self.build_required.set_false();
+                self.build_tests_required.set_false();
             }
 
-            (JobKind::Test(_), crate::jobs::CompletionStatus::Ok) => {
-                self.test_required.set_false();
+            (JobKind::ListTests(_), CompletionStatus::Ok) => {
+                self.list_tests_required.set_false();
+                self.run_tests_required.set_true();
             }
-
-            (JobKind::Test(_), crate::jobs::CompletionStatus::Error(_)) => {
+            (JobKind::ListTests(_), CompletionStatus::Error(_)) => {
                 // To prevent recursion, we need to wait till we get another file copy.
-                self.test_required.set_false();
+                self.list_tests_required.set_false();
+            }
+
+            (JobKind::RunTests(_), CompletionStatus::Ok) => {
+                self.run_tests_required.set_false();
+            }
+            (JobKind::RunTests(_), CompletionStatus::Error(_)) => {
+                // To prevent recursion, we need to wait till we get another file copy.
+                self.run_tests_required.set_false();
             }
 
             (_, CompletionStatus::Unknown) => {}

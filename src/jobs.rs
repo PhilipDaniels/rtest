@@ -1,11 +1,13 @@
 mod build_tests;
 mod file_sync;
-mod run_test;
+mod list_tests;
+mod run_tests;
 mod shadow_copy;
 
 pub use build_tests::BuildTestsJob;
 pub use file_sync::FileSyncJob;
-pub use run_test::TestJob;
+pub use list_tests::ListTestsJob;
+pub use run_tests::RunTestsJob;
 pub use shadow_copy::ShadowCopyJob;
 
 use chrono::{DateTime, Utc};
@@ -184,9 +186,12 @@ pub enum JobKind {
     FileSync(FileSyncJob),
 
     /// Perform a build of the destination directory.
-    Build(BuildTestsJob),
+    BuildTests(BuildTestsJob),
 
-    Test(TestJob),
+    /// List all tests.
+    ListTests(ListTestsJob),
+
+    RunTests(RunTestsJob),
 }
 
 impl Display for JobKind {
@@ -194,27 +199,30 @@ impl Display for JobKind {
         match self {
             JobKind::ShadowCopy(shadow_copy_job) => shadow_copy_job.fmt(f),
             JobKind::FileSync(file_sync_job) => file_sync_job.fmt(f),
-            JobKind::Build(build_job) => build_job.fmt(f),
-            JobKind::Test(test_job) => test_job.fmt(f),
+            JobKind::BuildTests(build_tests_job) => build_tests_job.fmt(f),
+            JobKind::ListTests(list_tests_job) => list_tests_job.fmt(f),
+            JobKind::RunTests(run_tests_job) => run_tests_job.fmt(f),
         }
     }
 }
 
 impl JobKind {
     #[must_use = "Don't ignore the completion status, caller needs to store it"]
-    fn execute(&mut self, parent: JobId) -> CompletionStatus {
+    fn execute(&mut self, parent_job_id: JobId) -> CompletionStatus {
         match self {
             JobKind::ShadowCopy(shadow_copy_job) => shadow_copy_job.execute(),
             JobKind::FileSync(file_sync_job) => file_sync_job.execute(),
-            JobKind::Build(build_job) => build_job.execute(parent),
-            JobKind::Test(test_job) => test_job.execute(parent),
+            JobKind::BuildTests(build_tests_job) => build_tests_job.execute(parent_job_id),
+            JobKind::ListTests(list_tests_job) => list_tests_job.execute(parent_job_id),
+            JobKind::RunTests(run_tests_job) => run_tests_job.execute(parent_job_id),
         }
     }
 }
 
 /// Every Job has a unique id.
-/// Note that cloning theoretically creates a duplicate Id. In practice, this only happens
-/// inside the engine when it is executing the job.
+/// Note that cloning theoretically creates a duplicate Id. In reality, this only happens
+/// inside the engine when it is executing the job and when we are passing them down
+/// the call stack so they can be printed out. It's not a problem in practice.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JobId {
     id: usize,
