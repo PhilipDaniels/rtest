@@ -224,6 +224,11 @@ impl JobEngine {
                 self.build_tests_required.set_false();
             }
 
+            // Having a built crate available is just a convenience. It doesn't affect
+            // the main flow of build tests -> list tests -> run tests.
+            (JobKind::BuildCrate(_), CompletionStatus::Ok) => { }
+            (JobKind::BuildCrate(_), CompletionStatus::Error(_)) => { }
+
             (JobKind::ListTests(_), CompletionStatus::Ok) => {
                 self.list_tests_required.set_false();
                 self.run_tests_required.set_true();

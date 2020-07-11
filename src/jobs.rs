@@ -1,9 +1,11 @@
+mod build_crate;
 mod build_tests;
 mod file_sync;
 mod list_tests;
 mod run_tests;
 mod shadow_copy;
 
+pub use build_crate::BuildCrateJob;
 pub use build_tests::BuildTestsJob;
 pub use file_sync::FileSyncJob;
 pub use list_tests::ListTestsJob;
@@ -185,8 +187,11 @@ pub enum JobKind {
     /// Perform a file sync (copy or delete) of a file.
     FileSync(FileSyncJob),
 
-    /// Perform a build of the destination directory.
+    /// Perform a build **tests only**.
     BuildTests(BuildTestsJob),
+
+    /// Perform a build **of the crate**.
+    BuildCrate(BuildCrateJob),
 
     /// List all tests.
     ListTests(ListTestsJob),
@@ -199,6 +204,7 @@ impl Display for JobKind {
         match self {
             JobKind::ShadowCopy(shadow_copy_job) => shadow_copy_job.fmt(f),
             JobKind::FileSync(file_sync_job) => file_sync_job.fmt(f),
+            JobKind::BuildCrate(build_crate_job) => build_crate_job.fmt(f),
             JobKind::BuildTests(build_tests_job) => build_tests_job.fmt(f),
             JobKind::ListTests(list_tests_job) => list_tests_job.fmt(f),
             JobKind::RunTests(run_tests_job) => run_tests_job.fmt(f),
@@ -212,6 +218,7 @@ impl JobKind {
         match self {
             JobKind::ShadowCopy(shadow_copy_job) => shadow_copy_job.execute(),
             JobKind::FileSync(file_sync_job) => file_sync_job.execute(),
+            JobKind::BuildCrate(build_crate_job) => build_crate_job.execute(parent_job_id),
             JobKind::BuildTests(build_tests_job) => build_tests_job.execute(parent_job_id),
             JobKind::ListTests(list_tests_job) => list_tests_job.execute(parent_job_id),
             JobKind::RunTests(run_tests_job) => run_tests_job.execute(parent_job_id),

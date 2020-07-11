@@ -8,13 +8,11 @@ use std::{
     process::{Command, ExitStatus},
 };
 
-/// Builds the tests **only**. This will fail if there is a compilation error in the main (non-test)
-/// code. The difference from `cargo build` is that it doesn't build the final crate target (such
-/// as an EXE for a bin crate). Some time is therefore saved on linking.
+/// Builds the crate. This makes the final product available, as a convenience.
 ///
-/// See also the `BuildCrateJob`.
+/// See also the `BuildTestsJob`.
 #[derive(Debug, Clone)]
-pub struct BuildTestsJob {
+pub struct BuildCrateJob {
     destination: ShadowCopyDestination,
     build_mode: BuildMode,
     exit_status: Option<ExitStatus>,
@@ -22,15 +20,15 @@ pub struct BuildTestsJob {
     stderr: Vec<u8>,
 }
 
-impl Display for BuildTestsJob {
+impl Display for BuildCrateJob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Build tests in {:?} mode", self.build_mode)
+        write!(f, "Build crate in {:?} mode", self.build_mode)
     }
 }
 
-impl BuildTestsJob {
+impl BuildCrateJob {
     pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> PendingJob {
-        let kind = JobKind::BuildTests(BuildTestsJob {
+        let kind = JobKind::BuildCrate(BuildCrateJob {
             destination: destination_directory,
             build_mode,
             exit_status: None,
@@ -46,7 +44,7 @@ impl BuildTestsJob {
         let cwd = if self.destination.is_copying() {
             let dir = self.destination.destination_directory().unwrap();
             info!(
-                "{} Building test in shadow copy directory {}",
+                "{} Building crate in shadow copy directory {}",
                 parent_job_id,
                 dir.display()
             );
@@ -54,7 +52,7 @@ impl BuildTestsJob {
         } else {
             let dir = self.destination.source_directory();
             info!(
-                "{} Building tests in the original directory {}",
+                "{} Building crate in the original directory {}",
                 parent_job_id,
                 dir.display()
             );
@@ -66,22 +64,23 @@ impl BuildTestsJob {
         let mut command = Command::new("cargo");
         command.current_dir(cwd);
 
-        command.arg("test");
-        command.arg("--no-run");
+        command.arg("build");
         command.arg("--color");
         command.arg("never");
         if self.build_mode == BuildMode::Release {
             command.arg("--release");
         }
 
-        let output = command.output().expect("Build tests command failed to start");
+        let output = command
+            .output()
+            .expect("Build tests command failed to start");
 
         self.exit_status = Some(output.status);
         self.stdout = output.stdout;
         self.stderr = output.stderr;
 
         let msg = format!(
-            "{} Build tests {}. ExitStatus={:?}, stdout={} bytes, stderr={} bytes",
+            "{} Build crate {}. ExitStatus={:?}, stdout={} bytes, stderr={} bytes",
             parent_job_id,
             if output.status.success() {
                 "succeeded"
