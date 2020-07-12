@@ -1,0 +1,10 @@
+    Finished test [unoptimized + debuginfo] target(s) in 0.04s
+     Running /home/phil/repos/rtest/target/debug/deps/example_bin_tests-9fa0296c6a0c95ca
+tests::failing_logging_test: test
+tests::failing_printing_test: test
+tests::failing_test1: test
+tests::ignored_test: test
+tests::passing_logging_test: test
+tests::passing_printing_test: test
+
+6 tests, 0 benchmarks

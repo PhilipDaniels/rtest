@@ -1,0 +1,17 @@
+    Finished test [unoptimized + debuginfo] target(s) in 0.05s
+     Running /home/phil/repos/rtest/target/debug/deps/example_lib_tests-9bdf7ee7378a8684
+tests::failing_logging_test: test
+tests::failing_printing_test: test
+tests::failing_test1: test
+tests::ignored_test: test
+tests::passing_logging_test: test
+tests::passing_printing_test: test
+
+6 tests, 0 benchmarks
+   Doc-tests example_lib_tests
+src/lib.rs - failing_doctest (line 21): test
+src/lib.rs - failing_printing_doctest (line 29): test
+src/lib.rs - passing_doctest (line 3): test
+src/lib.rs - passing_printing_doctest (line 11): test
+
+4 tests, 0 benchmarks
