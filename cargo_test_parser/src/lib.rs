@@ -1,104 +1,184 @@
 mod parse_context;
+mod parse_error;
+
+use parse_context::ParseContext;
+use parse_error::ParseError;
+
+/*
+- Recognise a unit test section
+    - Starts ^[ws]Running CRATE_NAME-GUID$
+    - Ends ^N tests, M benchmarks$
+    - Recognise a unit test name
+        - ^[MODULEPATH::TESTNAME]: test$
+
+- Recognise a doc section
+    - Starts ^[ws]Doc-tests CRATE_NAME$
+    - Ends ^N tests, M benchmarks$
+    - May be empty ("0 tests, 0 benchmarks")
+    - Recognise a doc test name
+        - ^[FILENAME].rs - TESTNAME (line N): test$
+*/
 
 /// Parses the output of `cargo test -- --list` and returns the result.
 /// There will be one entry in the result for each crate that was
 /// parsed. The parsing does not allocate any Strings, it only
 /// borrows references to the input `data`.
-pub fn parse_test_list(mut data: &str) -> Result<Vec<CrateTests>, ParseError> {
+pub fn parse_test_list(data: &str) -> Result<Vec<CrateTestList>, ParseError> {
     let mut result = Vec::new();
+    let mut ctx = ParseContext::new(data);
 
     loop {
-        match parse_crate(data)? {
-            ParsedData::Done => break,
-            ParsedData::CrateTest { tests, remainder } => {
-                result.push(tests);
-                data = remainder;
-            }
+        match parse_crate_test_list(&mut ctx)? {
+            Some(tests) => result.push(tests),
+            None => break
         }
     }
 
     Ok(result)
 }
 
-fn parse_crate(data: &str) -> Result<ParsedData, ParseError> {
-    match data.find("Running ") {
-        Some(idx) => {
-            let data = &data[idx..];
-            let more_data = parse_crate_name(data)?;
-
-            let tests = CrateTests {
-                crate_name: more_data.data.trim_end(),
-                unit_tests: vec![],
-                doc_tests: vec![],
-            };
-
-            return Ok(ParsedData::CrateTest {
-                tests,
-                remainder: more_data.remainder,
-            });
-        }
-        None => match data.trim().is_empty() {
-            true => return Ok(ParsedData::Done),
-            false => return Err(ParseError::ExtraInput(data.into())),
-        },
-    }
+/// Represents the set of tests in a single crate.
+#[derive(Debug, Default, Clone)]
+pub struct CrateTestList<'a> {
+    pub crate_name: &'a str,
+    pub unit_tests: Vec<&'a str>,
+    pub doc_tests: Vec<DocTest<'a>>,
 }
 
-fn parse_crate_name(data: &str) -> Result<MoreData, ParseError> {
-    let data = data.trim_start_matches("Running ");
-    eat_to_next_linefeed_expect_more(data)
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct DocTest<'a> {
+    pub name: &'a str,
+    pub line: usize,
+    pub file: &'a str,
 }
 
-/// Eats up to the next linefeed '\n' character.
-/// The 'n' character is NOT removed, it is included in the output.
-fn eat_to_next_linefeed(data: &str) -> EatenData {
-    match data.find('\n') {
-        Some(idx) if idx == data.len() - 1 => EatenData::EndOfData { data },
-        Some(idx) => {
-            let (data, remainder) = inclusive_split_at_index(data, idx);
-            EatenData::more(data, remainder)
-        }
-        None => EatenData::EndOfData { data },
-    }
-}
+/// Parse a single `CrateTestList` from the input.
+fn parse_crate_test_list<'ctx, 'a>(ctx: &'ctx mut ParseContext<'a>) -> Result<Option<CrateTestList<'a>>, ParseError> {
+    let mut skip = ctx.skip_while(|line| !line.contains("Running "));
 
-fn eat_to_next_linefeed_expect_more(data: &str) -> Result<MoreData, ParseError> {
-    match eat_to_next_linefeed(data) {
-        EatenData::EndOfData { data } => return Err(ParseError::UnexpectedEoF(data.into())),
-        EatenData::MoreData(more) => Ok(more),
-    }
-}
-
-/// Represents the name parsed from a 'Running' line, such as
-///   Running /home/phil/repos/rtest/target/debug/deps/example_lib_tests-9bdf7ee7378a8684
-/// `full_name` is everything, the `uuid` is the bit at the end, and `pretty_name` is everything
-/// up to the guid.
-#[derive(Debug, Clone)]
-pub struct CrateName<'a> {
-    full_name: &'a str,
-    uuid: &'a str,
-    pretty_name: &'a str,
-}
-
-impl<'a> CrateName<'a> {
-    /// Construct a new `CrateName`, parsing out the component bits.
-    /// Returns an error if the name does not end in a UUID.
-    fn new(full_name: &'a str) -> Result<Self, ParseError> {
-        match full_name.rfind('-') {
-            Some(idx) => {
-                let (pretty_name, uuid) = exclusive_split_at_index(full_name, idx);
-                let uuid = is_valid_uuid(uuid)?;
-
-                Ok(Self {
-                    full_name,
-                    uuid,
-                    pretty_name,
-                })
-            }
-            None => Err(ParseError::MalformedCrateName(full_name.into())),
+    loop {
+        let line = skip.next();
+        if line.is_none() {
+            break;
         }
     }
+
+    while let Some(line) = skip.next() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        if let Some(parsed) = parse_unit_test(line) {
+
+        } else if let Some(parsed) = parse_doc_test(line) {
+
+        } else if let Some(parsed) = parse_test_summary_count(line) {
+
+        } else {
+            // Anything else, we consider ourselves to be at the end.
+            break;
+        }
+    }
+
+    Ok(None)
 }
+
+fn parse_unit_test(line: &str) -> Option<&str> {
+    None
+}
+
+fn parse_doc_test(line: &str) -> Option<&str> {
+    None
+}
+
+fn parse_test_summary_count(line: &str) -> Option<&str> {
+    None
+}
+
+
+
+
+
+// fn parse_crate(data: &str) -> Result<ParsedData, ParseError> {
+//     match data.find("Running ") {
+//         Some(idx) => {
+//             let data = &data[idx..];
+//             let more_data = parse_crate_name(data)?;
+
+//             let tests = CrateTests {
+//                 crate_name: more_data.data.trim_end(),
+//                 unit_tests: vec![],
+//                 doc_tests: vec![],
+//             };
+
+//             return Ok(ParsedData::CrateTest {
+//                 tests,
+//                 remainder: more_data.remainder,
+//             });
+//         }
+//         None => match data.trim().is_empty() {
+//             true => return Ok(ParsedData::Done),
+//             false => return Err(ParseError::ExtraInput(data.into())),
+//         },
+//     }
+// }
+
+// fn parse_crate_name(data: &str) -> Result<MoreData, ParseError> {
+//     let data = data.trim_start_matches("Running ");
+//     eat_to_next_linefeed_expect_more(data)
+// }
+
+// /// Eats up to the next linefeed '\n' character.
+// /// The 'n' character is NOT removed, it is included in the output.
+// fn eat_to_next_linefeed(data: &str) -> EatenData {
+//     match data.find('\n') {
+//         Some(idx) if idx == data.len() - 1 => EatenData::EndOfData { data },
+//         Some(idx) => {
+//             let (data, remainder) = inclusive_split_at_index(data, idx);
+//             EatenData::more(data, remainder)
+//         }
+//         None => EatenData::EndOfData { data },
+//     }
+// }
+
+// fn eat_to_next_linefeed_expect_more(data: &str) -> Result<MoreData, ParseError> {
+//     match eat_to_next_linefeed(data) {
+//         EatenData::EndOfData { data } => return Err(ParseError::UnexpectedEoF(data.into())),
+//         EatenData::MoreData(more) => Ok(more),
+//     }
+// }
+
+// /// Represents the name parsed from a 'Running' line, such as
+// ///   Running /home/phil/repos/rtest/target/debug/deps/example_lib_tests-9bdf7ee7378a8684
+// /// `full_name` is everything, the `uuid` is the bit at the end, and `pretty_name` is everything
+// /// up to the guid.
+// #[derive(Debug, Clone)]
+// pub struct CrateName<'a> {
+//     full_name: &'a str,
+//     uuid: &'a str,
+//     pretty_name: &'a str,
+// }
+
+// impl<'a> CrateName<'a> {
+//     /// Construct a new `CrateName`, parsing out the component bits.
+//     /// Returns an error if the name does not end in a UUID.
+//     fn new(full_name: &'a str) -> Result<Self, ParseError> {
+//         match full_name.rfind('-') {
+//             Some(idx) => {
+//                 let (pretty_name, uuid) = exclusive_split_at_index(full_name, idx);
+//                 let uuid = is_valid_uuid(uuid)?;
+
+//                 Ok(Self {
+//                     full_name,
+//                     uuid,
+//                     pretty_name,
+//                 })
+//             }
+//             None => Err(ParseError::MalformedCrateName(full_name.into())),
+//         }
+//     }
+// }
 
 /// Splits the input into the part before and the part after
 /// the character at `idx` (that character is not included in
@@ -113,16 +193,16 @@ fn inclusive_split_at_index(data: &str, idx: usize) -> (&str, &str) {
     (&data[..idx + 1], &data[idx + 1..])
 }
 
-fn is_valid_uuid(data: &str) -> Result<&str, ParseError> {
-    if data.len() == 16 {
-        let all_hex = data.chars().all(|c| c.is_ascii_hexdigit());
-        if all_hex {
-            return Ok(data);
-        }
-    }
+// fn is_valid_uuid(data: &str) -> Result<&str, ParseError> {
+//     if data.len() == 16 {
+//         let all_hex = data.chars().all(|c| c.is_ascii_hexdigit());
+//         if all_hex {
+//             return Ok(data);
+//         }
+//     }
 
-    return Err(ParseError::MalformedUuid(data.into()));
-}
+//     return Err(ParseError::MalformedUuid(data.into()));
+// }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MoreData<'a> {
@@ -162,63 +242,12 @@ impl<'a> EatenData<'a> {
 pub enum ParsedData<'a> {
     Done,
     CrateTest {
-        tests: CrateTests<'a>,
+        tests: CrateTestList<'a>,
         remainder: &'a str,
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ParseError {
-    ExtraInput(String),
-    UnexpectedEoF(String),
-    MalformedCrateName(String),
-    MalformedUuid(String),
-}
 
-impl ParseError {
-    fn extra_input<S: Into<String>>(msg: S) -> Self {
-        Self::ExtraInput(msg.into())
-    }
-
-    fn eof<S: Into<String>>(msg: S) -> Self {
-        Self::UnexpectedEoF(msg.into())
-    }
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct CrateTests<'a> {
-    pub crate_name: &'a str,
-    pub unit_tests: Vec<&'a str>,
-    pub doc_tests: Vec<DocTest<'a>>,
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct DocTest<'a> {
-    pub name: &'a str,
-    pub line: usize,
-    pub file: &'a str,
-}
-
-// #[derive(Debug, Copy, Clone)]
-// pub enum TestType {
-//     Unit,
-//     Doc,
-// }
-
-/*
-- Recognise a unit test section
-    - Starts ^[ws]Running CRATE_NAME-GUID$
-    - Ends ^N tests, M benchmarks$
-    - Recognise a unit test name
-        - ^[MODULEPATH::TESTNAME]: test$
-
-- Recognise a doc section
-    - Starts ^[ws]Doc-tests CRATE_NAME$
-    - Ends ^N tests, M benchmarks$
-    - May be empty ("0 tests, 0 benchmarks")
-    - Recognise a doc test name
-        - ^[FILENAME].rs - TESTNAME (line N): test$
-*/
 
 #[cfg(test)]
 static ONE_LIB_INPUT: &str = include_str!(r"inputs/one_library.txt");
@@ -227,6 +256,7 @@ static ONE_BINARY_INPUT: &str = include_str!(r"inputs/one_binary.txt");
 #[cfg(test)]
 static MULTIPLE_CRATES_INPUT: &str = include_str!(r"inputs/multiple_crates.txt");
 
+/*
 #[cfg(test)]
 mod eat_to_next_linefeed_tests {
     use super::*;
@@ -267,7 +297,9 @@ mod eat_to_next_linefeed_tests {
         assert_eq!(result, EatenData::more("abc \r\n", "def"));
     }
 }
+*/
 
+/*
 #[cfg(test)]
 mod crate_name_tests {
     use super::*;
@@ -292,7 +324,9 @@ mod crate_name_tests {
         assert_eq!(result.uuid, "9bdf7ee7378a8684");
     }
 }
+*/
 
+/*
 #[cfg(test)]
 mod parse_crate_name_tests {
     use super::*;
@@ -334,7 +368,9 @@ mod parse_crate_name_tests {
         );
     }
 }
+*/
 
+/*
 #[cfg(test)]
 mod parse_crate_tests {
     use super::*;
@@ -352,7 +388,9 @@ mod parse_crate_tests {
         }
     }
 }
+*/
 
+/*
 #[cfg(test)]
 mod utility_function_tests {
     use super::*;
@@ -419,10 +457,4 @@ mod utility_function_tests {
         assert_eq!(inclusive_split_at_index("abc-def", 3), ("abc-", "def"));
     }
 }
-
-
-// Figure out how to report line numbers. (Track the data more sophisticated.)
-// Rename CrateTests to TestSpecifications or just Tests
-// Consider moving to a line-based parser.
-// States: PRE_AMBLE
-//
+*/
