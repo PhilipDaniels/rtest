@@ -1,3 +1,5 @@
+mod parse_context;
+
 /// Parses the output of `cargo test -- --list` and returns the result.
 /// There will be one entry in the result for each crate that was
 /// parsed. The parsing does not allocate any Strings, it only
