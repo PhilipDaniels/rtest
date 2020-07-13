@@ -1,3 +1,8 @@
+/// Represents where we are in the parsing.
+/// We parse by line, and it is convenient to be able to
+/// peek ahead and go back a line. We handle this by
+/// splitting up the entire `data` into `lines` and maintaining
+/// the `current_line_number` to tell is where we have reached.
 pub struct ParseContext<'a> {
     data: &'a str,
     lines: Vec<&'a str>,
@@ -176,7 +181,7 @@ mod parse_context_tests {
     #[test]
     fn prev_works() {
         let mut pc = ParseContext::new("abc\r\ndef");
-        let line = pc.next();
+        pc.next();
         let line = pc.next();
 
         // We should be on the last line now.

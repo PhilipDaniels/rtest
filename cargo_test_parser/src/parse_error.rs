@@ -1,18 +1,21 @@
 use crate::parse_context::ParseContext;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParseErrorKind {
     ExtraInput,
     UnexpectedEoF,
     MalformedCrateName,
     MalformedUuid,
+    UnitTestMiscount,
+    BenchmarkMiscount,
+    DocTestMiscount,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseError {
     line_number: usize,
     line: String,
-    kind: ParseErrorKind
+    pub(crate) kind: ParseErrorKind
 }
 
 impl ParseError {
@@ -48,5 +51,17 @@ impl ParseError {
     /// based on the current `ParseContext`.
     pub fn malformed_uuid(ctx: &ParseContext) -> Self {
         Self::with_kind(ParseErrorKind::MalformedUuid, ctx)
+    }
+
+    pub fn unit_test_miscount(ctx: &ParseContext) -> Self {
+        Self::with_kind(ParseErrorKind::UnitTestMiscount, ctx)
+    }
+
+    pub fn benchmark_miscount(ctx: &ParseContext) -> Self {
+        Self::with_kind(ParseErrorKind::BenchmarkMiscount, ctx)
+    }
+
+    pub fn doc_test_miscount(ctx: &ParseContext) -> Self {
+        Self::with_kind(ParseErrorKind::DocTestMiscount, ctx)
     }
 }

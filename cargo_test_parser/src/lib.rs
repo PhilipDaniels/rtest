@@ -1,8 +1,12 @@
+mod crate_name;
 mod parse_context;
 mod parse_error;
+mod utils;
 
+use crate_name::CrateName;
 use parse_context::ParseContext;
 use parse_error::ParseError;
+use utils::parse_leading_usize;
 
 /*
 - Recognise a unit test section
@@ -30,7 +34,7 @@ pub fn parse_test_list(data: &str) -> Result<Vec<CrateTestList>, ParseError> {
     loop {
         match parse_crate_test_list(&mut ctx)? {
             Some(tests) => result.push(tests),
-            None => break
+            None => break,
         }
     }
 
@@ -38,10 +42,11 @@ pub fn parse_test_list(data: &str) -> Result<Vec<CrateTestList>, ParseError> {
 }
 
 /// Represents the set of tests in a single crate.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct CrateTestList<'a> {
-    pub crate_name: &'a str,
+    pub crate_name: CrateName<'a>,
     pub unit_tests: Vec<&'a str>,
+    pub benchmarks: Vec<&'a str>,
     pub doc_tests: Vec<DocTest<'a>>,
 }
 
@@ -53,52 +58,122 @@ pub struct DocTest<'a> {
 }
 
 /// Parse a single `CrateTestList` from the input.
-fn parse_crate_test_list<'ctx, 'a>(ctx: &'ctx mut ParseContext<'a>) -> Result<Option<CrateTestList<'a>>, ParseError> {
-    let mut skip = ctx.skip_while(|line| !line.contains("Running "));
+fn parse_crate_test_list<'ctx, 'a>(
+    ctx: &'ctx mut ParseContext<'a>,
+) -> Result<Option<CrateTestList<'a>>, ParseError> {
+    const PREFIX: &str = "Running ";
 
-    loop {
-        let line = skip.next();
-        if line.is_none() {
-            break;
-        }
-    }
-
-    while let Some(line) = skip.next() {
+    while let Some(line) = ctx.next() {
         let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
 
-        if let Some(parsed) = parse_unit_test(line) {
+        if line.starts_with(PREFIX) {
+            // Ok, we found a test listing.
+            let line = line.trim_start_matches(PREFIX);
+            let crate_name = CrateName::parse(line, &ctx)?;
+            let mut ctl = CrateTestList {
+                crate_name,
+                unit_tests: Vec::new(),
+                benchmarks: Vec::new(),
+                doc_tests: Vec::new(),
+            };
 
-        } else if let Some(parsed) = parse_doc_test(line) {
+            // Next we expect the unit tests, if any, to be listed.
+            // This block will consist of lines of the form
+            //      tests::failing_test1: test
+            // and be terminated by a line of the form
+            //      "6 tests, 4 benchmarks"
+            while let Some(line) = ctx.next() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
 
-        } else if let Some(parsed) = parse_test_summary_count(line) {
+                if let Some((num_tests, num_benches)) = parse_test_summary_count(line) {
+                    // Check that we extracted the same number of items as
+                    // the summary line claims there are.
+                    if ctl.unit_tests.len() != num_tests {
+                        return Err(ParseError::unit_test_miscount(ctx));
+                    }
+                    if ctl.benchmarks.len() != num_benches {
+                        return Err(ParseError::benchmark_miscount(ctx));
+                    }
 
-        } else {
-            // Anything else, we consider ourselves to be at the end.
-            break;
+                    break;
+                }
+
+                if let Some(test_name) = parse_unit_test(line) {
+                    ctl.unit_tests.push(test_name);
+                } else if let Some(test_name) = parse_bench_test(line) {
+                    ctl.benchmarks.push(test_name);
+                }
+            }
+
+            return Ok(Some(ctl));
         }
     }
 
     Ok(None)
 }
 
+/// Parses a line of the form "tests::failing_test1: test", as occurs when the
+/// unit tests are being listed. Returns the name of the test if the parse
+/// succeeds, `None` otherwise.
 fn parse_unit_test(line: &str) -> Option<&str> {
-    None
+    let line = line.trim();
+
+    // TODO: Not sure what the point of this trailing test is.
+    // It might be where "benchmarks" are distinguished.
+    if line.ends_with(": test") {
+        Some(line.trim_end_matches(": test"))
+    } else {
+        None
+    }
+}
+
+/// Parses a line of the form "tests::failing_test1: bench", as occurs when the
+/// unit tests are being listed. Returns the name of the test if the parse
+/// succeeds, `None` otherwise.
+fn parse_bench_test(line: &str) -> Option<&str> {
+    let line = line.trim();
+
+    // TODO: Not sure what the point of this trailing test is.
+    // It might be where "benchmarks" are distinguished.
+    if line.ends_with(": bench") {
+        Some(line.trim_end_matches(": bench"))
+    } else {
+        None
+    }
 }
 
 fn parse_doc_test(line: &str) -> Option<&str> {
     None
 }
 
-fn parse_test_summary_count(line: &str) -> Option<&str> {
-    None
+/// Parse a line of the form "4 tests, 2 benchmarks", returning the two counts
+/// if the line matches this form, `None` otherwise.
+fn parse_test_summary_count(line: &str) -> Option<(usize, usize)> {
+    let mut parts = line.splitn(2, ", ");
+    let p1 = parts.next();
+    let p2 = parts.next();
+
+    match (p1, p2) {
+        (Some(s1), Some(s2)) => {
+            if s1.ends_with(" tests") {
+                // If we fail to parse an int from the beginning of the string,
+                // just assume this is a non-compliant line and return None.
+                let num_tests = parse_leading_usize(s1)?;
+
+                if s2.ends_with(" benchmarks") {
+                    let num_benchmarks = parse_leading_usize(s2)?;
+                    return Some((num_tests, num_benchmarks));
+                }
+            }
+
+            None
+        }
+        _ => None,
+    }
 }
-
-
-
-
 
 // fn parse_crate(data: &str) -> Result<ParsedData, ParseError> {
 //     match data.find("Running ") {
@@ -124,11 +199,6 @@ fn parse_test_summary_count(line: &str) -> Option<&str> {
 //     }
 // }
 
-// fn parse_crate_name(data: &str) -> Result<MoreData, ParseError> {
-//     let data = data.trim_start_matches("Running ");
-//     eat_to_next_linefeed_expect_more(data)
-// }
-
 // /// Eats up to the next linefeed '\n' character.
 // /// The 'n' character is NOT removed, it is included in the output.
 // fn eat_to_next_linefeed(data: &str) -> EatenData {
@@ -149,105 +219,48 @@ fn parse_test_summary_count(line: &str) -> Option<&str> {
 //     }
 // }
 
-// /// Represents the name parsed from a 'Running' line, such as
-// ///   Running /home/phil/repos/rtest/target/debug/deps/example_lib_tests-9bdf7ee7378a8684
-// /// `full_name` is everything, the `uuid` is the bit at the end, and `pretty_name` is everything
-// /// up to the guid.
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// struct MoreData<'a> {
+//     data: &'a str,
+//     remainder: &'a str,
+// }
+
+// impl<'a> MoreData<'a> {
+//     /// Constructor for a `MoreData` instance.
+//     fn new(data: &'a str, remainder: &'a str) -> Self {
+//         Self { data, remainder }
+//     }
+// }
+
+// /// Represents the result of an 'eat' operation.
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// enum EatenData<'a> {
+//     /// All the data was eaten, there is no more to follow.
+//     EndOfData { data: &'a str },
+//     /// Some of the data was eaten, but there is more to follow.
+//     MoreData(MoreData<'a>),
+// }
+
+// impl<'a> EatenData<'a> {
+//     /// Constructor for the EndOfData variant.
+//     fn end(data: &'a str) -> Self {
+//         Self::EndOfData { data: data }
+//     }
+
+//     /// Constructor the the MoreData variant.
+//     fn more(data: &'a str, remainder: &'a str) -> Self {
+//         Self::MoreData(MoreData::new(data, remainder))
+//     }
+// }
+
 // #[derive(Debug, Clone)]
-// pub struct CrateName<'a> {
-//     full_name: &'a str,
-//     uuid: &'a str,
-//     pretty_name: &'a str,
+// pub enum ParsedData<'a> {
+//     Done,
+//     CrateTest {
+//         tests: CrateTestList<'a>,
+//         remainder: &'a str,
+//     },
 // }
-
-// impl<'a> CrateName<'a> {
-//     /// Construct a new `CrateName`, parsing out the component bits.
-//     /// Returns an error if the name does not end in a UUID.
-//     fn new(full_name: &'a str) -> Result<Self, ParseError> {
-//         match full_name.rfind('-') {
-//             Some(idx) => {
-//                 let (pretty_name, uuid) = exclusive_split_at_index(full_name, idx);
-//                 let uuid = is_valid_uuid(uuid)?;
-
-//                 Ok(Self {
-//                     full_name,
-//                     uuid,
-//                     pretty_name,
-//                 })
-//             }
-//             None => Err(ParseError::MalformedCrateName(full_name.into())),
-//         }
-//     }
-// }
-
-/// Splits the input into the part before and the part after
-/// the character at `idx` (that character is not included in
-/// either part).
-fn exclusive_split_at_index(data: &str, idx: usize) -> (&str, &str) {
-    (&data[..idx], &data[idx + 1..])
-}
-
-/// Splits the input into the part before and including
-/// the character at `idx`, and the part after that.
-fn inclusive_split_at_index(data: &str, idx: usize) -> (&str, &str) {
-    (&data[..idx + 1], &data[idx + 1..])
-}
-
-// fn is_valid_uuid(data: &str) -> Result<&str, ParseError> {
-//     if data.len() == 16 {
-//         let all_hex = data.chars().all(|c| c.is_ascii_hexdigit());
-//         if all_hex {
-//             return Ok(data);
-//         }
-//     }
-
-//     return Err(ParseError::MalformedUuid(data.into()));
-// }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct MoreData<'a> {
-    data: &'a str,
-    remainder: &'a str,
-}
-
-impl<'a> MoreData<'a> {
-    /// Constructor for a `MoreData` instance.
-    fn new(data: &'a str, remainder: &'a str) -> Self {
-        Self { data, remainder }
-    }
-}
-
-/// Represents the result of an 'eat' operation.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum EatenData<'a> {
-    /// All the data was eaten, there is no more to follow.
-    EndOfData { data: &'a str },
-    /// Some of the data was eaten, but there is more to follow.
-    MoreData(MoreData<'a>),
-}
-
-impl<'a> EatenData<'a> {
-    /// Constructor for the EndOfData variant.
-    fn end(data: &'a str) -> Self {
-        Self::EndOfData { data: data }
-    }
-
-    /// Constructor the the MoreData variant.
-    fn more(data: &'a str, remainder: &'a str) -> Self {
-        Self::MoreData(MoreData::new(data, remainder))
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum ParsedData<'a> {
-    Done,
-    CrateTest {
-        tests: CrateTestList<'a>,
-        remainder: &'a str,
-    },
-}
-
-
 
 #[cfg(test)]
 static ONE_LIB_INPUT: &str = include_str!(r"inputs/one_library.txt");
@@ -295,33 +308,6 @@ mod eat_to_next_linefeed_tests {
     fn line_alone_with_more() {
         let result = eat_to_next_linefeed("abc \r\ndef");
         assert_eq!(result, EatenData::more("abc \r\n", "def"));
-    }
-}
-*/
-
-/*
-#[cfg(test)]
-mod crate_name_tests {
-    use super::*;
-
-    #[test]
-    fn new_for_empty_full_name() {
-        let result = CrateName::new("").unwrap_err();
-        assert_eq!(result, ParseError::MalformedCrateName("".into()));
-    }
-
-    #[test]
-    fn new_for_full_name_with_no_guid() {
-        let result = CrateName::new("/long/path").unwrap_err();
-        assert_eq!(result, ParseError::MalformedCrateName("/long/path".into()));
-    }
-
-    #[test]
-    fn new_for_full_name_with_valid_guid() {
-        let result = CrateName::new("/long/path-9bdf7ee7378a8684").unwrap();
-        assert_eq!(result.full_name, "/long/path-9bdf7ee7378a8684");
-        assert_eq!(result.pretty_name, "/long/path");
-        assert_eq!(result.uuid, "9bdf7ee7378a8684");
     }
 }
 */
@@ -390,71 +376,128 @@ mod parse_crate_tests {
 }
 */
 
-/*
+/// A bunch of tests that just check that our extract-next collection sequence
+/// for `CrateTestList` works. Does not check that we can extract the names
+/// of the unit and doc tests themselves.
 #[cfg(test)]
-mod utility_function_tests {
-    use super::*;
+mod parse_test_list_simple_tests {
+    use crate::parse_test_list;
 
     #[test]
-    fn is_valid_uuid_for_empty_string() {
-        let result = is_valid_uuid("").unwrap_err();
-        assert_eq!(result, ParseError::MalformedUuid("".into()));
+    fn parse_test_list_for_empty_data() {
+        let tests = parse_test_list("").unwrap();
+        assert!(tests.is_empty());
     }
 
     #[test]
-    fn is_valid_uuid_for_valid_uuid_lowercase() {
-        let result = is_valid_uuid("9bdf7ee7378a8684").unwrap();
-        assert_eq!(result, "9bdf7ee7378a8684");
+    fn parse_test_list_for_one_crate_without_preamble() {
+        let tests =
+            parse_test_list("  Running /abc-9bdf7ee7378a8684\n0 tests, 0 benchmarks").unwrap();
+        assert_eq!(tests.len(), 1);
+        assert_eq!(tests[0].crate_name.full_name, "/abc-9bdf7ee7378a8684");
     }
 
     #[test]
-    fn is_valid_uuid_for_valid_uuid_uppercase() {
-        let result = is_valid_uuid("9BDF7EE7378A8684").unwrap();
-        assert_eq!(result, "9BDF7EE7378A8684");
+    fn parse_test_list_for_one_crate_with_preamble() {
+        let tests = parse_test_list("  Finished test  [unoptimized + debuginfo] target(s) in 0.05s\n  Running /abc-9bdf7ee7378a8684\n0 tests, 0 benchmarks").unwrap();
+        assert_eq!(tests.len(), 1);
+        assert_eq!(tests[0].crate_name.full_name, "/abc-9bdf7ee7378a8684");
     }
 
     #[test]
-    fn is_valid_uuid_for_start_padded_uuid() {
-        let result = is_valid_uuid("-9bdf7ee7378a8684").unwrap_err();
-        assert_eq!(
-            result,
-            ParseError::MalformedUuid("-9bdf7ee7378a8684".into())
-        );
-    }
-
-    #[test]
-    fn is_valid_uuid_for_end_padded_uuid() {
-        let result = is_valid_uuid("9bdf7ee7378a8684\n").unwrap_err();
-        assert_eq!(
-            result,
-            ParseError::MalformedUuid("9bdf7ee7378a8684\n".into())
-        );
-    }
-
-    #[test]
-    fn exclusive_split_at_index_for_single_char_data() {
-        let (lhs, rhs) = exclusive_split_at_index("a", 0);
-        assert_eq!(lhs, "");
-        assert_eq!(rhs, "");
-    }
-
-    #[test]
-    fn exclusive_split_at_index_nominal_case() {
-        assert_eq!(exclusive_split_at_index("a-b", 1), ("a", "b"));
-        assert_eq!(exclusive_split_at_index("abc-def", 3), ("abc", "def"));
-    }
-
-    #[test]
-    fn inclusive_split_at_index_for_single_char_data() {
-        let (lhs, rhs) = inclusive_split_at_index("a", 0);
-        assert_eq!(lhs, "a");
-        assert_eq!(rhs, "");
-    }
-
-    #[test]
-    fn inclusive_split_at_index_nominal_case() {
-        assert_eq!(inclusive_split_at_index("a-b", 1), ("a-", "b"));
-        assert_eq!(inclusive_split_at_index("abc-def", 3), ("abc-", "def"));
+    fn parse_test_list_for_two_crates_with_no_bodies() {
+        let tests = parse_test_list("  Running /abc-9bdf7ee7378a8684\n0 tests, 0 benchmarks\n  Running /def-0490fca25dc32581\n0 tests, 0 benchmarks").unwrap();
+        assert_eq!(tests.len(), 2);
+        assert_eq!(tests[0].crate_name.full_name, "/abc-9bdf7ee7378a8684");
+        assert_eq!(tests[1].crate_name.full_name, "/def-0490fca25dc32581");
     }
 }
-*/
+
+/// A bunch of tests that check we are extracting unit tests correctly.
+#[cfg(test)]
+mod parse_test_list_unit_tests {
+    use crate::{parse_error::ParseErrorKind, parse_test_list};
+
+    #[test]
+    fn parse_test_list_for_one_crate_without_preamble() {
+        let input = "  Running /abc-9bdf7ee7378a8684
+a::b::c: test
+d::e::f: test
+
+2 tests, 0 benchmarks";
+        let tests = parse_test_list(input).unwrap();
+        assert_eq!(tests.len(), 1);
+        assert_eq!(tests[0].crate_name.full_name, "/abc-9bdf7ee7378a8684");
+        assert_eq!(tests[0].unit_tests.len(), 2);
+        assert_eq!(tests[0].unit_tests[0], "a::b::c");
+        assert_eq!(tests[0].unit_tests[1], "d::e::f");
+    }
+
+    #[test]
+    fn parse_test_list_with_unit_test_miscount() {
+        let input = "  Running /abc-9bdf7ee7378a8684
+d::e::f: test
+
+2 tests, 0 benchmarks";
+        let tests = parse_test_list(input).unwrap_err();
+        assert_eq!(tests.kind, ParseErrorKind::UnitTestMiscount);
+    }
+
+    #[test]
+    fn parse_test_list_with_benchmark_miscount() {
+        let input = "  Running /abc-9bdf7ee7378a8684
+d::e::f: bench
+
+0 tests, 2 benchmarks";
+        let tests = parse_test_list(input).unwrap_err();
+        assert_eq!(tests.kind, ParseErrorKind::BenchmarkMiscount);
+    }
+}
+
+#[cfg(test)]
+mod parse_test_summary_count_tests {
+    use crate::parse_test_summary_count;
+
+    #[test]
+    fn parse_for_empty_data() {
+        assert!(parse_test_summary_count("").is_none());
+    }
+
+    #[test]
+    fn parse_for_truncated_data() {
+        assert!(parse_test_summary_count("0 tests").is_none());
+        assert!(parse_test_summary_count("0 tests,").is_none());
+        assert!(parse_test_summary_count("0 tests, 2").is_none());
+    }
+
+    #[test]
+    fn parse_for_good_data() {
+        let (a, b) = parse_test_summary_count("1 tests, 2 benchmarks").unwrap();
+        assert_eq!(a, 1);
+        assert_eq!(b, 2);
+    }
+}
+
+#[cfg(test)]
+mod parse_unit_test_tests {
+    use crate::parse_unit_test;
+
+    #[test]
+    fn parse_for_empty_data() {
+        assert!(parse_unit_test("").is_none());
+    }
+
+    #[test]
+    fn parse_for_truncated_data() {
+        assert!(parse_unit_test(" a ").is_none());
+        assert!(parse_unit_test("a::b::c").is_none());
+        assert!(parse_unit_test("a::b::c:test").is_none());
+        assert!(parse_unit_test("a::b::c: tes").is_none());
+    }
+
+    #[test]
+    fn parse_for_good_data() {
+        assert_eq!(parse_unit_test("a: test"), Some("a"));
+        assert_eq!(parse_unit_test(" a::b::c: test "), Some("a::b::c"));
+    }
+}
