@@ -2,7 +2,7 @@
 ///
 /// ```
 /// let a = 3;
-/// assert_eq(a, 3);
+/// assert_eq!(a, 3);
 /// ```
 fn passing_doctest() { }
 
@@ -12,7 +12,7 @@ fn passing_doctest() { }
 /// println!("This is a println in passing_printing_doctest");
 /// eprintln!("This is an eprintln in passing_printing_doctest");
 /// let a = 3;
-/// assert_eq(a, 3);
+/// assert_eq!(a, 3);
 /// ```
 fn passing_printing_doctest() { }
 
@@ -20,7 +20,7 @@ fn passing_printing_doctest() { }
 ///
 /// ```
 /// let a = 3;
-/// assert_eq(a, 4);
+/// assert_eq!(a, 4);
 /// ```
 fn failing_doctest() { }
 
@@ -30,7 +30,7 @@ fn failing_doctest() { }
 /// println!("This is a println in failing_printing_doctest");
 /// eprintln!("This is an eprintln in failing_printing_doctest");
 /// let a = 3;
-/// assert_eq(a, 4);
+/// assert_eq!(a, 4);
 /// ```
 fn failing_printing_doctest() { }
 
