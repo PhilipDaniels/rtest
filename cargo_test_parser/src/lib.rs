@@ -45,9 +45,10 @@ pub fn parse_test_list(data: &str) -> Result<Vec<CrateTestList>, ParseError> {
 #[derive(Debug, Clone)]
 pub struct CrateTestList<'a> {
     pub crate_name: CrateName<'a>,
-    pub unit_tests: Vec<&'a str>,
+    pub tests: Vec<&'a str>,
     pub benchmarks: Vec<&'a str>,
     pub doc_tests: Vec<DocTest<'a>>,
+    pub doc_benchmarks: Vec<DocTest<'a>>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -72,9 +73,10 @@ fn parse_crate_test_list<'ctx, 'a>(
             let crate_name = CrateName::parse(line, &ctx)?;
             let mut ctl = CrateTestList {
                 crate_name,
-                unit_tests: Vec::new(),
+                tests: Vec::new(),
                 benchmarks: Vec::new(),
                 doc_tests: Vec::new(),
+                doc_benchmarks: Vec::new(),
             };
 
             // Next we expect the unit tests, if any, to be listed.
@@ -91,7 +93,7 @@ fn parse_crate_test_list<'ctx, 'a>(
                 if let Some((num_tests, num_benches)) = parse_test_summary_count(line) {
                     // Check that we extracted the same number of items as
                     // the summary line claims there are.
-                    if ctl.unit_tests.len() != num_tests {
+                    if ctl.tests.len() != num_tests {
                         return Err(ParseError::unit_test_miscount(ctx));
                     }
                     if ctl.benchmarks.len() != num_benches {
@@ -102,7 +104,7 @@ fn parse_crate_test_list<'ctx, 'a>(
                 }
 
                 if let Some(test_name) = parse_unit_test(line) {
-                    ctl.unit_tests.push(test_name);
+                    ctl.tests.push(test_name);
                 } else if let Some(test_name) = parse_bench_test(line) {
                     ctl.benchmarks.push(test_name);
                 }
@@ -145,6 +147,8 @@ fn parse_bench_test(line: &str) -> Option<&str> {
     }
 }
 
+/// Parses a line of the form `src/lib.rs - passing_doctest (line 3): test`
+/// which occurs when the doc-tests are being listed.
 fn parse_doc_test(line: &str) -> Option<&str> {
     None
 }
@@ -174,93 +178,6 @@ fn parse_test_summary_count(line: &str) -> Option<(usize, usize)> {
         _ => None,
     }
 }
-
-// fn parse_crate(data: &str) -> Result<ParsedData, ParseError> {
-//     match data.find("Running ") {
-//         Some(idx) => {
-//             let data = &data[idx..];
-//             let more_data = parse_crate_name(data)?;
-
-//             let tests = CrateTests {
-//                 crate_name: more_data.data.trim_end(),
-//                 unit_tests: vec![],
-//                 doc_tests: vec![],
-//             };
-
-//             return Ok(ParsedData::CrateTest {
-//                 tests,
-//                 remainder: more_data.remainder,
-//             });
-//         }
-//         None => match data.trim().is_empty() {
-//             true => return Ok(ParsedData::Done),
-//             false => return Err(ParseError::ExtraInput(data.into())),
-//         },
-//     }
-// }
-
-// /// Eats up to the next linefeed '\n' character.
-// /// The 'n' character is NOT removed, it is included in the output.
-// fn eat_to_next_linefeed(data: &str) -> EatenData {
-//     match data.find('\n') {
-//         Some(idx) if idx == data.len() - 1 => EatenData::EndOfData { data },
-//         Some(idx) => {
-//             let (data, remainder) = inclusive_split_at_index(data, idx);
-//             EatenData::more(data, remainder)
-//         }
-//         None => EatenData::EndOfData { data },
-//     }
-// }
-
-// fn eat_to_next_linefeed_expect_more(data: &str) -> Result<MoreData, ParseError> {
-//     match eat_to_next_linefeed(data) {
-//         EatenData::EndOfData { data } => return Err(ParseError::UnexpectedEoF(data.into())),
-//         EatenData::MoreData(more) => Ok(more),
-//     }
-// }
-
-// #[derive(Debug, Clone, PartialEq, Eq)]
-// struct MoreData<'a> {
-//     data: &'a str,
-//     remainder: &'a str,
-// }
-
-// impl<'a> MoreData<'a> {
-//     /// Constructor for a `MoreData` instance.
-//     fn new(data: &'a str, remainder: &'a str) -> Self {
-//         Self { data, remainder }
-//     }
-// }
-
-// /// Represents the result of an 'eat' operation.
-// #[derive(Debug, Clone, PartialEq, Eq)]
-// enum EatenData<'a> {
-//     /// All the data was eaten, there is no more to follow.
-//     EndOfData { data: &'a str },
-//     /// Some of the data was eaten, but there is more to follow.
-//     MoreData(MoreData<'a>),
-// }
-
-// impl<'a> EatenData<'a> {
-//     /// Constructor for the EndOfData variant.
-//     fn end(data: &'a str) -> Self {
-//         Self::EndOfData { data: data }
-//     }
-
-//     /// Constructor the the MoreData variant.
-//     fn more(data: &'a str, remainder: &'a str) -> Self {
-//         Self::MoreData(MoreData::new(data, remainder))
-//     }
-// }
-
-// #[derive(Debug, Clone)]
-// pub enum ParsedData<'a> {
-//     Done,
-//     CrateTest {
-//         tests: CrateTestList<'a>,
-//         remainder: &'a str,
-//     },
-// }
 
 #[cfg(test)]
 static ONE_LIB_INPUT: &str = include_str!(r"inputs/one_library.txt");
@@ -428,9 +345,9 @@ d::e::f: test
         let tests = parse_test_list(input).unwrap();
         assert_eq!(tests.len(), 1);
         assert_eq!(tests[0].crate_name.full_name, "/abc-9bdf7ee7378a8684");
-        assert_eq!(tests[0].unit_tests.len(), 2);
-        assert_eq!(tests[0].unit_tests[0], "a::b::c");
-        assert_eq!(tests[0].unit_tests[1], "d::e::f");
+        assert_eq!(tests[0].tests.len(), 2);
+        assert_eq!(tests[0].tests[0], "a::b::c");
+        assert_eq!(tests[0].tests[1], "d::e::f");
     }
 
     #[test]
