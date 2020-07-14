@@ -27,7 +27,7 @@ use utils::parse_leading_usize;
 /// There will be one entry in the result for each crate that was
 /// parsed. The parsing does not allocate any Strings, it only
 /// borrows references to the input `data`.
-pub fn parse_test_list(data: &str) -> Result<Vec<CrateTestList>, ParseError> {
+pub fn parse_test_list(data: &str) -> Result<Vec<Tests>, ParseError> {
     let mut result = Vec::new();
     let mut ctx = ParseContext::new(data);
 
@@ -41,14 +41,21 @@ pub fn parse_test_list(data: &str) -> Result<Vec<CrateTestList>, ParseError> {
     Ok(result)
 }
 
-/// Represents the set of tests in a single crate.
+/// Represents the set of unit tests (normal tests or benchmarks)
+/// in a single crate.
 #[derive(Debug, Clone)]
-pub struct CrateTestList<'a> {
+pub struct Tests<'a> {
     pub crate_name: CrateName<'a>,
     pub tests: Vec<&'a str>,
     pub benchmarks: Vec<&'a str>,
-    pub doc_tests: Vec<DocTest<'a>>,
-    pub doc_benchmarks: Vec<DocTest<'a>>,
+}
+/// Represents the set of doc tests (normal tests or benchmarks)
+/// in a single crate.
+#[derive(Debug, Clone)]
+pub struct DocTests<'a> {
+    pub crate_name: CrateName<'a>,
+    pub tests: Vec<DocTest<'a>>,
+    pub benchmarks: Vec<DocTest<'a>>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -61,7 +68,7 @@ pub struct DocTest<'a> {
 /// Parse a single `CrateTestList` from the input.
 fn parse_crate_test_list<'ctx, 'a>(
     ctx: &'ctx mut ParseContext<'a>,
-) -> Result<Option<CrateTestList<'a>>, ParseError> {
+) -> Result<Option<Tests<'a>>, ParseError> {
     const PREFIX: &str = "Running ";
 
     while let Some(line) = ctx.next() {
@@ -71,12 +78,10 @@ fn parse_crate_test_list<'ctx, 'a>(
             // Ok, we found a test listing.
             let line = line.trim_start_matches(PREFIX);
             let crate_name = CrateName::parse(line, &ctx)?;
-            let mut ctl = CrateTestList {
+            let mut ctl = Tests {
                 crate_name,
                 tests: Vec::new(),
                 benchmarks: Vec::new(),
-                doc_tests: Vec::new(),
-                doc_benchmarks: Vec::new(),
             };
 
             // Next we expect the unit tests, if any, to be listed.
@@ -186,112 +191,6 @@ static ONE_BINARY_INPUT: &str = include_str!(r"inputs/one_binary.txt");
 #[cfg(test)]
 static MULTIPLE_CRATES_INPUT: &str = include_str!(r"inputs/multiple_crates.txt");
 
-/*
-#[cfg(test)]
-mod eat_to_next_linefeed_tests {
-    use super::*;
-
-    #[test]
-    fn empty_input() {
-        let result = eat_to_next_linefeed("");
-        assert_eq!(result, EatenData::end(""));
-    }
-
-    #[test]
-    fn linefeed_alone() {
-        let result = eat_to_next_linefeed("\n");
-        assert_eq!(result, EatenData::end("\n"));
-    }
-
-    #[test]
-    fn linefeed_with_more() {
-        let result = eat_to_next_linefeed("\nabc");
-        assert_eq!(result, EatenData::more("\n", "abc"));
-    }
-
-    #[test]
-    fn word_alone() {
-        let result = eat_to_next_linefeed("abc ");
-        assert_eq!(result, EatenData::end("abc "));
-    }
-
-    #[test]
-    fn line_alone() {
-        let result = eat_to_next_linefeed("abc \r\n");
-        assert_eq!(result, EatenData::end("abc \r\n"));
-    }
-
-    #[test]
-    fn line_alone_with_more() {
-        let result = eat_to_next_linefeed("abc \r\ndef");
-        assert_eq!(result, EatenData::more("abc \r\n", "def"));
-    }
-}
-*/
-
-/*
-#[cfg(test)]
-mod parse_crate_name_tests {
-    use super::*;
-
-    #[test]
-    fn empty_input() {
-        let result = parse_crate_name("").unwrap_err();
-        assert_eq!(result, ParseError::eof(""));
-    }
-
-    #[test]
-    fn non_matching_input() {
-        let result = parse_crate_name("abc").unwrap_err();
-        assert_eq!(result, ParseError::eof("abc"));
-    }
-
-    #[test]
-    fn not_enough_input() {
-        let result = parse_crate_name("Running /home/foo/blah-9bdf7ee7378a8684").unwrap_err();
-        assert_eq!(result, ParseError::eof("/home/foo/blah-9bdf7ee7378a8684"));
-    }
-
-    #[test]
-    fn enough_input() {
-        let result =
-            parse_crate_name("Running /home/foo/blah-9bdf7ee7378a8684\nsome more").unwrap();
-        assert_eq!(
-            result,
-            MoreData::new("/home/foo/blah-9bdf7ee7378a8684\n", "some more")
-        );
-    }
-
-    #[test]
-    fn untrimmed_start() {
-        let result = parse_crate_name("  Running /home/foo/blah-9bdf7ee7378a8684").unwrap_err();
-        assert_eq!(
-            result,
-            ParseError::eof("  Running /home/foo/blah-9bdf7ee7378a8684")
-        );
-    }
-}
-*/
-
-/*
-#[cfg(test)]
-mod parse_crate_tests {
-    use super::*;
-
-    #[test]
-    fn one_lib() {
-        match parse_crate(ONE_LIB_INPUT).unwrap() {
-            ParsedData::Done => panic!("Bad parse"),
-            ParsedData::CrateTest { tests, remainder } => {
-                assert_eq!(
-                    tests.crate_name,
-                    "/home/phil/repos/rtest/target/debug/deps/example_lib_tests-9bdf7ee7378a8684"
-                );
-            }
-        }
-    }
-}
-*/
 
 /// A bunch of tests that just check that our extract-next collection sequence
 /// for `CrateTestList` works. Does not check that we can extract the names
