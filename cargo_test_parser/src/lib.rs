@@ -8,21 +8,6 @@ use parse_context::ParseContext;
 use parse_error::ParseError;
 use utils::parse_leading_usize;
 
-/*
-- Recognise a unit test section
-    - Starts ^[ws]Running CRATE_NAME-GUID$
-    - Ends ^N tests, M benchmarks$
-    - Recognise a unit test name
-        - ^[MODULEPATH::TESTNAME]: test$
-
-- Recognise a doc section
-    - Starts ^[ws]Doc-tests CRATE_NAME$
-    - Ends ^N tests, M benchmarks$
-    - May be empty ("0 tests, 0 benchmarks")
-    - Recognise a doc test name
-        - ^[FILENAME].rs - TESTNAME (line N): test$
-*/
-
 /// Parses the output of `cargo test -- --list` and returns the result.
 /// There will be one entry in the result for each crate that was
 /// parsed. The parsing does not allocate any Strings, it only
@@ -49,6 +34,7 @@ pub struct Tests<'a> {
     pub tests: Vec<&'a str>,
     pub benchmarks: Vec<&'a str>,
 }
+
 /// Represents the set of doc tests (normal tests or benchmarks)
 /// in a single crate.
 #[derive(Debug, Clone)]
