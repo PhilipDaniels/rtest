@@ -1,9 +1,11 @@
 mod crate_name;
+mod doc_test;
 mod parse_context;
 mod parse_error;
 mod utils;
 
 use crate_name::CrateName;
+use doc_test::DocTest;
 use parse_context::ParseContext;
 use parse_error::ParseError;
 use utils::parse_leading_usize;
@@ -11,66 +13,31 @@ use utils::parse_leading_usize;
 /// Parses the output of `cargo test -- --list` and returns the result.
 /// There will be one entry in the result vector for each crate that was
 /// parsed. Within each crate, the tests and doc tests are listed
-/// separately. Further, unit tests are distinguished from benchmarks.
+/// separately. Note: benchmarks are currently not supported because
+/// they are not available in stable rust without 3rd party support,
+/// and there are multiple ways of doing that.
 ///
+/// # Performance
 /// The parsing does not allocate any Strings, it only borrows references
-/// to the input `data`.
+/// to the input `data`. It will allocate some vectors.
 pub fn parse_test_list(data: &str) -> Result<Vec<Tests>, ParseError> {
-    let mut result = Vec::new();
+    const RUNNING_PREFIX: &str = "Running ";
+    const DOC_TEST_PREFIX: &str = "Doc-tests ";
+
+    let mut tests = Vec::new();
     let mut ctx = ParseContext::new(data);
-
-    loop {
-        match parse_crate_test_list(&mut ctx)? {
-            Some(tests) => result.push(tests),
-            None => break,
-        }
-    }
-
-    Ok(result)
-}
-
-/// Represents the set of unit tests (normal tests or benchmarks)
-/// in a single crate.
-#[derive(Debug, Clone)]
-pub struct Tests<'a> {
-    pub crate_name: CrateName<'a>,
-    pub tests: Vec<&'a str>,
-    pub benchmarks: Vec<&'a str>,
-}
-
-/// Represents the set of doc tests (normal tests or benchmarks)
-/// in a single crate.
-#[derive(Debug, Clone)]
-pub struct DocTests<'a> {
-    pub crate_name: CrateName<'a>,
-    pub tests: Vec<DocTest<'a>>,
-    pub benchmarks: Vec<DocTest<'a>>,
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct DocTest<'a> {
-    pub name: &'a str,
-    pub line: usize,
-    pub file: &'a str,
-}
-
-/// Parse a single `CrateTestList` from the input.
-fn parse_crate_test_list<'ctx, 'a>(
-    ctx: &'ctx mut ParseContext<'a>,
-) -> Result<Option<Tests<'a>>, ParseError> {
-    const PREFIX: &str = "Running ";
 
     while let Some(line) = ctx.next() {
         let line = line.trim();
 
-        if line.starts_with(PREFIX) {
-            // Ok, we found a test listing.
-            let line = line.trim_start_matches(PREFIX);
+        if line.starts_with(RUNNING_PREFIX) {
+            // Ok, we found a standard test listing.
+            let line = line.trim_start_matches(RUNNING_PREFIX);
             let crate_name = CrateName::parse(line, &ctx)?;
-            let mut ctl = Tests {
+            let mut crate_tests = Tests {
                 crate_name,
                 tests: Vec::new(),
-                benchmarks: Vec::new(),
+                doc_tests: Vec::new(),
             };
 
             // Next we expect the unit tests, if any, to be listed.
@@ -84,31 +51,84 @@ fn parse_crate_test_list<'ctx, 'a>(
                     continue;
                 }
 
-                if let Some((num_tests, num_benches)) = parse_test_summary_count(line) {
+                if let Some((num_tests, _num_benches)) = parse_test_summary_count(line) {
                     // Check that we extracted the same number of items as
                     // the summary line claims there are.
-                    if ctl.tests.len() != num_tests {
-                        return Err(ParseError::unit_test_miscount(ctx));
+                    if crate_tests.tests.len() != num_tests {
+                        return Err(ParseError::unit_test_miscount(&ctx));
                     }
-                    if ctl.benchmarks.len() != num_benches {
-                        return Err(ParseError::benchmark_miscount(ctx));
-                    }
+                    // TODO: Check benchmarks here.
 
                     break;
                 }
 
                 if let Some(test_name) = parse_unit_test(line) {
-                    ctl.tests.push(test_name);
-                } else if let Some(test_name) = parse_bench_test(line) {
-                    ctl.benchmarks.push(test_name);
+                    crate_tests.tests.push(test_name);
                 }
             }
 
-            return Ok(Some(ctl));
+            tests.push(crate_tests)
+        } else if line.starts_with(DOC_TEST_PREFIX) {
+            // Ok we found a set of doc tests. The crate for these has *probably* already
+            // been seen, so we try to attach to the one already in the `tests` vector
+            // or create a new Tests if there isn't one already.
+            // The line is of the form "  Doc-tests some_crate_name"
+            let line = line.trim_start_matches(DOC_TEST_PREFIX);
+            let crate_name = line.trim();
+
+            if tests
+                .iter_mut()
+                .find(|ct| ct.crate_name.basename == crate_name)
+                .is_none()
+            {
+                dbg!(line);
+                let crate_tests = Tests {
+                    crate_name: CrateName::parse(line, &ctx).unwrap(),
+                    tests: Vec::new(),
+                    doc_tests: Vec::new(),
+                };
+                tests.push(crate_tests);
+            }
+
+            let crate_tests = tests
+                .iter_mut()
+                .find(|ct| ct.crate_name.basename == crate_name)
+                .unwrap();
+
+            // Now attach all the doc tests to `crate_tests`.
+            while let Some(line) = ctx.next() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+
+                if let Some((num_tests, _num_benches)) = parse_test_summary_count(line) {
+                    // Check that we extracted the same number of items as
+                    // the summary line claims there are.
+                    if crate_tests.doc_tests.len() != num_tests {
+                        return Err(ParseError::unit_test_miscount(&ctx));
+                    }
+                    // TODO: Check benchmarks here.
+
+                    break;
+                }
+
+                let doc_test = DocTest::parse(line, &ctx)?;
+                crate_tests.doc_tests.push(doc_test);
+            }
         }
     }
 
-    Ok(None)
+    Ok(tests)
+}
+
+/// Represents the set of unit tests (normal tests or benchmarks)
+/// in a single crate.
+#[derive(Debug, Clone)]
+pub struct Tests<'a> {
+    pub crate_name: CrateName<'a>,
+    pub tests: Vec<&'a str>,
+    pub doc_tests: Vec<DocTest<'a>>,
 }
 
 /// Parses a line of the form "tests::failing_test1: test", as occurs when the
@@ -139,12 +159,6 @@ fn parse_bench_test(line: &str) -> Option<&str> {
     } else {
         None
     }
-}
-
-/// Parses a line of the form `src/lib.rs - passing_doctest (line 3): test`
-/// which occurs when the doc-tests are being listed.
-fn parse_doc_test(line: &str) -> Option<&str> {
-    None
 }
 
 /// Parse a line of the form "4 tests, 2 benchmarks", returning the two counts
@@ -247,6 +261,7 @@ d::e::f: test
         assert_eq!(tests.kind, ParseErrorKind::UnitTestMiscount);
     }
 
+    #[ignore = "We don't support benchmarks yet"]
     #[test]
     fn parse_test_list_with_benchmark_miscount() {
         let input = "  Running /abc-9bdf7ee7378a8684
@@ -255,6 +270,56 @@ d::e::f: bench
 0 tests, 2 benchmarks";
         let tests = parse_test_list(input).unwrap_err();
         assert_eq!(tests.kind, ParseErrorKind::BenchmarkMiscount);
+    }
+}
+
+#[cfg(test)]
+mod parse_test_list_doc_tests {
+    use crate::{parse_error::ParseErrorKind, parse_test_list};
+
+    #[test]
+    fn parse_doc_tests_with_no_prior_unit_tests() {
+        // I am not sure if this can happen, but the code supports it.
+        let input = "   Doc-tests wibble
+src/foo.rs - one_doc_test (line 999): test
+
+1 tests, 0 benchmarks";
+
+        let tests = parse_test_list(input).unwrap();
+        assert_eq!(tests.len(), 1);
+        assert_eq!(tests[0].crate_name.full_name, "wibble");
+        assert_eq!(tests[0].tests.len(), 0);
+        assert_eq!(tests[0].doc_tests.len(), 1);
+        assert_eq!(tests[0].doc_tests[0].name, "one_doc_test");
+    }
+
+    #[test]
+    fn parse_doc_tests_with_associated_unit_tests() {
+        let input = "     Running target/debug/deps/example_bin_tests-b371342d81493fca
+        tests::failing_logging_test: test
+        tests::failing_printing_test: test
+        tests::failing_test1: test
+        tests::ignored_test: test
+        tests::passing_logging_test: test
+        tests::passing_printing_test: test
+        
+        6 tests, 0 benchmarks
+             Running target/debug/deps/example_lib_tests-35c4554393436661
+        tests::failing_logging_test: test
+        tests::failing_printing_test: test
+        tests::failing_test1: test
+        tests::ignored_test: test
+        tests::passing_logging_test: test
+        tests::passing_printing_test: test
+
+        Doc-tests example_lib_tests
+        src/lib.rs - failing_doctest (line 21): test
+        src/lib.rs - failing_printing_doctest (line 29): test
+        src/lib.rs - passing_doctest (line 3): test
+        src/lib.rs - passing_printing_doctest (line 11): test
+        
+        4 tests, 0 benchmarks
+";
     }
 }
 

@@ -9,6 +9,7 @@ pub enum ParseErrorKind {
     UnitTestMiscount,
     BenchmarkMiscount,
     DocTestMiscount,
+    MalformedDocTestLine,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,15 +54,27 @@ impl ParseError {
         Self::with_kind(ParseErrorKind::MalformedUuid, ctx)
     }
 
+    /// Construct a `ParseError` of kind `ParseErrorKind::UnitTestMiscount`
+    /// based on the current `ParseContext`.
     pub fn unit_test_miscount(ctx: &ParseContext) -> Self {
         Self::with_kind(ParseErrorKind::UnitTestMiscount, ctx)
     }
 
+    /// Construct a `ParseError` of kind `ParseErrorKind::BenchmarkMiscount`
+    /// based on the current `ParseContext`.
     pub fn benchmark_miscount(ctx: &ParseContext) -> Self {
         Self::with_kind(ParseErrorKind::BenchmarkMiscount, ctx)
     }
 
+    /// Construct a `ParseError` of kind `ParseErrorKind::DocTestMiscount`
+    /// based on the current `ParseContext`.
     pub fn doc_test_miscount(ctx: &ParseContext) -> Self {
         Self::with_kind(ParseErrorKind::DocTestMiscount, ctx)
+    }
+
+    /// Construct a `ParseError` of kind `ParseErrorKind::MalformedDocTestLine`
+    /// based on the current `ParseContext`.
+    pub fn malformed_doc_test_line(ctx: &ParseContext) -> Self {
+        Self::with_kind(ParseErrorKind::MalformedDocTestLine, ctx)
     }
 }

@@ -44,7 +44,6 @@ pub fn parse_leading_usize(data: &str) -> Option<usize> {
         None => data
     };
 
-    dbg!(&data);
     data.parse().ok()
 }
 

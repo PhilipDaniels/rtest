@@ -6,6 +6,8 @@ use crate::{
 
 /// Represents the name parsed from a 'Running' line, such as
 /// "Running /home/phil/repos/rtest/target/debug/deps/example_lib_tests-9bdf7ee7378a8684"
+/// or the name parsed from a 'Doc-tests' line such as
+/// "Doc-tests example_lib_tests".
 #[derive(Debug, Clone)]
 pub struct CrateName<'a> {
     /// The full name of the crate, as extracted from a 'Running' line, for example
@@ -31,6 +33,11 @@ impl<'a> CrateName<'a> {
         full_name: &'a str,
         ctx: &'ctx ParseContext,
     ) -> Result<CrateName<'a>, ParseError> {
+        let full_name = full_name.trim();
+        if full_name.is_empty() {
+            return Err(ParseError::malformed_crate_name(ctx));
+        }
+
         match full_name.rfind('-') {
             Some(idx) => {
                 let (name, uuid) = exclusive_split_at_index(full_name, idx);
@@ -47,7 +54,16 @@ impl<'a> CrateName<'a> {
                     basename,
                 })
             }
-            None => Err(ParseError::malformed_crate_name(ctx)),
+            None => {
+                // Just assume everything is the crate name. This can occur, for example
+                // when using just "Doc-test some_crate_name".
+                Ok(Self {
+                    full_name,
+                    uuid: "",
+                    name: full_name,
+                    basename: full_name,
+                })
+            }
         }
     }
 }
@@ -62,19 +78,31 @@ mod tests {
     }
 
     #[test]
-    fn new_for_empty_full_name() {
+    fn parse_empty_full_name() {
         let result = CrateName::parse("", &make_ctx()).unwrap_err();
         assert_eq!(result.kind, ParseErrorKind::MalformedCrateName);
     }
 
     #[test]
-    fn new_for_full_name_with_no_guid() {
-        let result = CrateName::parse("/long/path", &make_ctx()).unwrap_err();
-        assert_eq!(result.kind, ParseErrorKind::MalformedCrateName);
+    fn parse_one_word_name_like_in_doc_tests() {
+        let result = CrateName::parse("winterfell", &make_ctx()).unwrap();
+        assert_eq!(result.basename, "winterfell");
+        assert_eq!(result.uuid, "");
+        assert_eq!(result.name, "winterfell");
+        assert_eq!(result.full_name, "winterfell");
     }
 
     #[test]
-    fn new_for_full_name_with_multiple_components_and_valid_guid() {
+    fn parse_full_name_with_no_guid() {
+        let result = CrateName::parse("/long/path", &make_ctx()).unwrap();
+        assert_eq!(result.basename, "/long/path");
+        assert_eq!(result.uuid, "");
+        assert_eq!(result.name, "/long/path");
+        assert_eq!(result.full_name, "/long/path");
+    }
+
+    #[test]
+    fn parse_full_name_with_multiple_components_and_valid_guid() {
         let result = CrateName::parse("/long/path-9bdf7ee7378a8684", &make_ctx()).unwrap();
         assert_eq!(result.full_name, "/long/path-9bdf7ee7378a8684");
         assert_eq!(result.name, "/long/path");
@@ -83,7 +111,7 @@ mod tests {
     }
 
     #[test]
-    fn new_for_full_name_with_single_component_and_valid_guid() {
+    fn parse_full_name_with_single_component_and_valid_guid() {
         let result = CrateName::parse("/path-9bdf7ee7378a8684", &make_ctx()).unwrap();
         assert_eq!(result.full_name, "/path-9bdf7ee7378a8684");
         assert_eq!(result.name, "/path");
@@ -92,12 +120,11 @@ mod tests {
     }
 
     #[test]
-    fn new_for_full_name_with_no_leading_slash_and_valid_guid() {
+    fn parse_full_name_with_no_leading_slash_and_valid_guid() {
         let result = CrateName::parse("path-9bdf7ee7378a8684", &make_ctx()).unwrap();
         assert_eq!(result.full_name, "path-9bdf7ee7378a8684");
         assert_eq!(result.name, "path");
         assert_eq!(result.uuid, "9bdf7ee7378a8684");
         assert_eq!(result.basename, "path");
     }
-
 }
