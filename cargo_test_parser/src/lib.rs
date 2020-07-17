@@ -9,9 +9,12 @@ use parse_error::ParseError;
 use utils::parse_leading_usize;
 
 /// Parses the output of `cargo test -- --list` and returns the result.
-/// There will be one entry in the result for each crate that was
-/// parsed. The parsing does not allocate any Strings, it only
-/// borrows references to the input `data`.
+/// There will be one entry in the result vector for each crate that was
+/// parsed. Within each crate, the tests and doc tests are listed
+/// separately. Further, unit tests are distinguished from benchmarks.
+///
+/// The parsing does not allocate any Strings, it only borrows references
+/// to the input `data`.
 pub fn parse_test_list(data: &str) -> Result<Vec<Tests>, ParseError> {
     let mut result = Vec::new();
     let mut ctx = ParseContext::new(data);
@@ -176,7 +179,6 @@ static ONE_LIB_INPUT: &str = include_str!(r"inputs/one_library.txt");
 static ONE_BINARY_INPUT: &str = include_str!(r"inputs/one_binary.txt");
 #[cfg(test)]
 static MULTIPLE_CRATES_INPUT: &str = include_str!(r"inputs/multiple_crates.txt");
-
 
 /// A bunch of tests that just check that our extract-next collection sequence
 /// for `CrateTestList` works. Does not check that we can extract the names

@@ -5,14 +5,23 @@ use crate::{
 };
 
 /// Represents the name parsed from a 'Running' line, such as
-///   Running /home/phil/repos/rtest/target/debug/deps/example_lib_tests-9bdf7ee7378a8684
-/// `full_name` is everything, the `uuid` is the bit at the end, and `pretty_name` is everything
-/// up to the guid.
+/// "Running /home/phil/repos/rtest/target/debug/deps/example_lib_tests-9bdf7ee7378a8684"
 #[derive(Debug, Clone)]
 pub struct CrateName<'a> {
+    /// The full name of the crate, as extracted from a 'Running' line, for example
+    /// "Running /home/phil/repos/rtest/target/debug/deps/example_lib_tests-9bdf7ee7378a8684"
     pub full_name: &'a str,
+
+    /// The UUID part of the `full_name`.
     pub uuid: &'a str,
-    pub pretty_name: &'a str,
+
+    /// The name with the UUID removed, for example
+    /// "/home/phil/repos/rtest/target/debug/deps/example_lib_tests".
+    pub name: &'a str,
+
+    /// The base part of the `name`, for example "example_lib_tests"
+    /// from "/home/phil/repos/rtest/target/debug/deps/example_lib_tests".
+    pub basename: &'a str,
 }
 
 impl<'a> CrateName<'a> {
@@ -24,13 +33,18 @@ impl<'a> CrateName<'a> {
     ) -> Result<CrateName<'a>, ParseError> {
         match full_name.rfind('-') {
             Some(idx) => {
-                let (pretty_name, uuid) = exclusive_split_at_index(full_name, idx);
+                let (name, uuid) = exclusive_split_at_index(full_name, idx);
                 let uuid = is_valid_uuid(uuid, ctx)?;
+                let basename = match name.rfind("/") {
+                    Some(idx) => &name[idx + 1..],
+                    None => name,
+                };
 
                 Ok(Self {
                     full_name,
                     uuid,
-                    pretty_name,
+                    name,
+                    basename,
                 })
             }
             None => Err(ParseError::malformed_crate_name(ctx)),
@@ -60,10 +74,30 @@ mod tests {
     }
 
     #[test]
-    fn new_for_full_name_with_valid_guid() {
+    fn new_for_full_name_with_multiple_components_and_valid_guid() {
         let result = CrateName::parse("/long/path-9bdf7ee7378a8684", &make_ctx()).unwrap();
         assert_eq!(result.full_name, "/long/path-9bdf7ee7378a8684");
-        assert_eq!(result.pretty_name, "/long/path");
+        assert_eq!(result.name, "/long/path");
         assert_eq!(result.uuid, "9bdf7ee7378a8684");
+        assert_eq!(result.basename, "path");
     }
+
+    #[test]
+    fn new_for_full_name_with_single_component_and_valid_guid() {
+        let result = CrateName::parse("/path-9bdf7ee7378a8684", &make_ctx()).unwrap();
+        assert_eq!(result.full_name, "/path-9bdf7ee7378a8684");
+        assert_eq!(result.name, "/path");
+        assert_eq!(result.uuid, "9bdf7ee7378a8684");
+        assert_eq!(result.basename, "path");
+    }
+
+    #[test]
+    fn new_for_full_name_with_no_leading_slash_and_valid_guid() {
+        let result = CrateName::parse("path-9bdf7ee7378a8684", &make_ctx()).unwrap();
+        assert_eq!(result.full_name, "path-9bdf7ee7378a8684");
+        assert_eq!(result.name, "path");
+        assert_eq!(result.uuid, "9bdf7ee7378a8684");
+        assert_eq!(result.basename, "path");
+    }
+
 }
