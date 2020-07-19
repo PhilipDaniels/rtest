@@ -2,24 +2,33 @@ use crate::{CARGO_PKG_AUTHORS, CARGO_PKG_DESCRIPTION, CARGO_PKG_NAME, CARGO_PKG_
 use clap::{App, Arg};
 use log::info;
 use std::path::PathBuf;
-use tempfile::TempDir;
 
-/// Specifies the mode that the shadow-copy destination directory works in.
-#[derive(Debug)]
-pub enum DestinationType {
-    /// The source directory is used. No shadow-copying is done.
-    SourceDirectory(PathBuf),
-    /// A specific, user-named directory is used.
+/// Represents the destination directory for the shadow-copy operation.
+/// If `UseSourceDirectory`, then no shadow copying is performed and
+/// all operations are performed in the original (source) directory.
+#[derive(Debug, Clone)]
+pub enum DestinationDirectory {
+    SameAsSource,
     NamedDirectory(PathBuf),
-    /// A temporary directory created and cleaned up by the system is used.
-    TempDirectory(TempDir),
 }
 
+impl DestinationDirectory {
+    /// Returns `true` if shadow-copy operations are actually being peformed.
+    /// Alternatively, if we are doing everything in the source without shadow
+    /// copying, then `false` is returned.
+    pub fn is_copying(&self) -> bool {
+        match self {
+            DestinationDirectory::SameAsSource => false,
+            DestinationDirectory::NamedDirectory(_) => true,
+        }
+    }
+}
+
+/// Represents the global configuration of `rtest` during one run.
 #[derive(Debug)]
 pub struct Configuration {
-    /// The directory that contains the sources we will be testing.
     pub source_directory: PathBuf,
-    pub destination_directory: DestinationType,
+    pub destination_directory: DestinationDirectory,
 }
 
 pub fn new() -> Configuration {
@@ -28,30 +37,29 @@ pub fn new() -> Configuration {
 
     let destination_directory = if args.do_shadow_copy {
         if args.destination.is_none() {
-            let dir = tempfile::tempdir().expect("Cannot create tempdir");
-            DestinationType::TempDirectory(dir)
+            let temp_dir = tempfile::tempdir().expect("Cannot create tempdir");
+            DestinationDirectory::NamedDirectory(temp_dir.path().into())
         } else {
-            DestinationType::NamedDirectory(args.destination.unwrap())
+            DestinationDirectory::NamedDirectory(args.destination.unwrap())
         }
     } else {
-        DestinationType::SourceDirectory(args.source.clone())
+        DestinationDirectory::SameAsSource
     };
 
     Configuration {
         source_directory: args.source,
-        destination_directory: destination_directory,
+        destination_directory,
     }
 }
 
 #[derive(Debug)]
-struct Arguments {
+struct CommandLineArguments {
     do_shadow_copy: bool,
     source: PathBuf,
     destination: Option<PathBuf>,
 }
 
-/// Use clap to parse the arguments.
-fn get_cli_arguments() -> Arguments {
+fn get_cli_arguments() -> CommandLineArguments {
     let matches = App::new(CARGO_PKG_NAME)
         .version(CARGO_PKG_VERSION)
         .author(CARGO_PKG_AUTHORS)
@@ -75,7 +83,7 @@ fn get_cli_arguments() -> Arguments {
 
     let destination = matches.value_of("dest").map(|v| v.into());
 
-    Arguments {
+    CommandLineArguments {
         do_shadow_copy,
         source,
         destination,
