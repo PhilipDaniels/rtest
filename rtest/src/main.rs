@@ -15,7 +15,6 @@ mod utils;
 
 use engine::JobEngine;
 use jobs::{FileSyncJob, ShadowCopyJob};
-use shadow_copy_destination::ShadowCopyDestination;
 use source_directory_watcher::FileSyncEvent;
 use ui::build_main_window;
 
@@ -31,15 +30,11 @@ fn main() {
     let config = configuration::new();
     info!("{:?}", config);
 
+    let engine = JobEngine::new(config.destination.clone());
+
     // If a shadow copy operation is required, kick one off.
-    // This & is important to ensure the temp dir gets dropped when we exit,
-    // otherwise it gets moved and dropped before we do the shadow-copy!
-    let dest = ShadowCopyDestination::new(&config.source_directory, config.destination_directory);
-
-    let engine = JobEngine::new(dest.clone());
-
-    if dest.is_copying() {
-        let job = ShadowCopyJob::new(dest.clone());
+    if config.destination.is_copying() {
+        let job = ShadowCopyJob::new(config.destination.clone());
         engine.add_job(job);
 
         // Then watch for incremental file changes. Use another thread to
@@ -49,7 +44,7 @@ fn main() {
 
         std::thread::spawn({
             let engine = engine.clone();
-            let dest = dest.clone();
+            let dest = config.destination.clone();
 
             move || {
                 for event in receiver {
@@ -60,7 +55,7 @@ fn main() {
         });
     }
 
-    // This blocks this thread.
+    // This call blocks this thread.
     create_main_window();
 
     info!("Stopping {}", CARGO_PKG_NAME);

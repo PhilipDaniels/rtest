@@ -1,54 +1,39 @@
-use crate::{CARGO_PKG_AUTHORS, CARGO_PKG_DESCRIPTION, CARGO_PKG_NAME, CARGO_PKG_VERSION};
+use crate::{
+    shadow_copy_destination::ShadowCopyDestination, CARGO_PKG_AUTHORS, CARGO_PKG_DESCRIPTION,
+    CARGO_PKG_NAME, CARGO_PKG_VERSION,
+};
 use clap::{App, Arg};
 use log::info;
 use std::path::PathBuf;
 
-/// Represents the destination directory for the shadow-copy operation.
-/// If `UseSourceDirectory`, then no shadow copying is performed and
-/// all operations are performed in the original (source) directory.
-#[derive(Debug, Clone)]
-pub enum DestinationDirectory {
-    SameAsSource,
-    NamedDirectory(PathBuf),
-}
-
-impl DestinationDirectory {
-    /// Returns `true` if shadow-copy operations are actually being peformed.
-    /// Alternatively, if we are doing everything in the source without shadow
-    /// copying, then `false` is returned.
-    pub fn is_copying(&self) -> bool {
-        match self {
-            DestinationDirectory::SameAsSource => false,
-            DestinationDirectory::NamedDirectory(_) => true,
-        }
-    }
-}
-
 /// Represents the global configuration of `rtest` during one run.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Configuration {
     pub source_directory: PathBuf,
-    pub destination_directory: DestinationDirectory,
+    pub destination: ShadowCopyDestination,
 }
 
 pub fn new() -> Configuration {
     let args = get_cli_arguments();
     info!("CLI {:?}", args);
 
-    let destination_directory = if args.do_shadow_copy {
+    let destination = if args.do_shadow_copy {
         if args.destination.is_none() {
             let temp_dir = tempfile::tempdir().expect("Cannot create tempdir");
-            DestinationDirectory::NamedDirectory(temp_dir.path().into())
+            ShadowCopyDestination::new(
+                args.source.to_path_buf(),
+                Some(temp_dir.path().to_path_buf()),
+            )
         } else {
-            DestinationDirectory::NamedDirectory(args.destination.unwrap())
+            ShadowCopyDestination::new(args.source.to_path_buf(), Some(args.destination.unwrap()))
         }
     } else {
-        DestinationDirectory::SameAsSource
+        ShadowCopyDestination::new(args.source.to_path_buf(), None)
     };
 
     Configuration {
         source_directory: args.source,
-        destination_directory,
+        destination,
     }
 }
 

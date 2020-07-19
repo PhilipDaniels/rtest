@@ -1,7 +1,27 @@
-use crate::configuration::DestinationDirectory;
 use log::{error, info};
 use remove_dir_all::remove_dir_all;
 use std::path::{Path, PathBuf};
+
+/// Represents the destination directory for the shadow-copy operation.
+/// If `UseSourceDirectory`, then no shadow copying is performed and
+/// all operations are performed in the original (source) directory.
+#[derive(Debug, Clone)]
+pub enum DestinationDirectory {
+    SameAsSource,
+    NamedDirectory(PathBuf),
+}
+
+impl DestinationDirectory {
+    /// Returns `true` if shadow-copy operations are actually being peformed.
+    /// Alternatively, if we are doing everything in the source without shadow
+    /// copying, then `false` is returned.
+    pub fn is_copying(&self) -> bool {
+        match self {
+            DestinationDirectory::SameAsSource => false,
+            DestinationDirectory::NamedDirectory(_) => true,
+        }
+    }
+}
 
 /// The directory where we (possibly) make the shadow copy and do the
 /// compilations and test runs.
@@ -12,13 +32,14 @@ pub struct ShadowCopyDestination {
 }
 
 impl ShadowCopyDestination {
-    pub fn new<P>(source_directory: P, destination: DestinationDirectory) -> Self
-    where
-        P: Into<PathBuf>,
+    pub fn new(source_directory: PathBuf, destination: Option<PathBuf>) -> Self
     {
         Self {
-            source_directory: source_directory.into(),
-            destination,
+            source_directory,
+            destination: match destination {
+                Some(dir) => DestinationDirectory::NamedDirectory(dir.into()),
+                None => DestinationDirectory::SameAsSource,
+            }
         }
     }
 
