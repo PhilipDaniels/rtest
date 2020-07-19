@@ -1,9 +1,9 @@
 use crate::{
+    configuration::Configuration,
     jobs::{
-        BuildMode, BuildTestsJob, CompletedJob, CompletionStatus, Job, JobKind, ListTestsJob,
-        PendingJob, RunTestsJob,
+        BuildTestsJob, CompletedJob, CompletionStatus, Job, JobKind, ListTestsJob, PendingJob,
+        RunTestsJob,
     },
-    shadow_copy_destination::ShadowCopyDestination,
     thread_clutch::ThreadClutch,
 };
 use log::info;
@@ -33,7 +33,7 @@ ELSE
 
 #[derive(Debug, Clone)]
 pub struct JobEngine {
-    dest_dir: ShadowCopyDestination,
+    configuration: Configuration,
 
     /// The list of pending (yet to be executed) jobs.
     pending_jobs: Arc<Mutex<VecDeque<PendingJob>>>,
@@ -61,9 +61,9 @@ pub struct JobEngine {
 
 impl JobEngine {
     /// Creates a new job engine that is running and ready to process jobs.
-    pub fn new(dest_dir: ShadowCopyDestination) -> Self {
+    pub fn new(configuration: Configuration) -> Self {
         let this = Self {
-            dest_dir,
+            configuration,
             pending_jobs: Default::default(),
             executing_job: Default::default(),
             completed_jobs: Default::default(),
@@ -152,18 +152,20 @@ impl JobEngine {
 
                 info!("{}", msg);
 
-                // TODO: Pull this from config.
-                let build_mode = BuildMode::Debug;
+                let build_mode = self.configuration.build_mode;
 
                 if pending_jobs_lock.is_empty() {
                     if self.build_tests_required.is_true() {
-                        let job = BuildTestsJob::new(self.dest_dir.clone(), build_mode);
+                        let job =
+                            BuildTestsJob::new(self.configuration.destination.clone(), build_mode);
                         self.add_job_inner(job, pending_jobs_lock);
                     } else if self.list_tests_required.is_true() {
-                        let job = ListTestsJob::new(self.dest_dir.clone(), build_mode);
+                        let job =
+                            ListTestsJob::new(self.configuration.destination.clone(), build_mode);
                         self.add_job_inner(job, pending_jobs_lock);
                     } else if self.run_tests_required.is_true() {
-                        let job = RunTestsJob::new(self.dest_dir.clone(), build_mode);
+                        let job =
+                            RunTestsJob::new(self.configuration.destination.clone(), build_mode);
                         self.add_job_inner(job, pending_jobs_lock);
                     }
                 }
@@ -234,8 +236,8 @@ impl JobEngine {
 
             // Having a built crate available is just a convenience. It doesn't affect
             // the main flow of build tests -> list tests -> run tests.
-            (JobKind::BuildCrate(_), CompletionStatus::Ok) => { }
-            (JobKind::BuildCrate(_), CompletionStatus::Error(_)) => { }
+            (JobKind::BuildCrate(_), CompletionStatus::Ok) => {}
+            (JobKind::BuildCrate(_), CompletionStatus::Error(_)) => {}
 
             (JobKind::ListTests(_), CompletionStatus::Ok) => {
                 self.list_tests_required.set_false();

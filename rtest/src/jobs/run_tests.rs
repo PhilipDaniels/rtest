@@ -1,7 +1,7 @@
-use super::{BuildMode, JobId};
+use super::{JobId};
 use crate::{
     jobs::{CompletionStatus, JobKind, PendingJob},
-    shadow_copy_destination::ShadowCopyDestination,
+    shadow_copy_destination::ShadowCopyDestination, configuration::Profile,
 };
 use log::{info, warn};
 use std::{
@@ -12,7 +12,7 @@ use std::{
 #[derive(Debug, Clone)]
 pub struct RunTestsJob {
     destination: ShadowCopyDestination,
-    build_mode: BuildMode,
+    build_mode: Profile,
     exit_status: Option<ExitStatus>,
     stdout: Vec<u8>,
     stderr: Vec<u8>,
@@ -25,7 +25,7 @@ impl Display for RunTestsJob {
 }
 
 impl RunTestsJob {
-    pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> PendingJob {
+    pub fn new(destination_directory: ShadowCopyDestination, build_mode: Profile) -> PendingJob {
         let kind = JobKind::RunTests(RunTestsJob {
             destination: destination_directory,
             build_mode,

@@ -1,6 +1,6 @@
 use crate::{
-    jobs::{BuildMode, CompletionStatus, JobId, JobKind, PendingJob},
-    shadow_copy_destination::ShadowCopyDestination,
+    jobs::{CompletionStatus, JobId, JobKind, PendingJob},
+    shadow_copy_destination::ShadowCopyDestination, configuration::Profile,
 };
 use cargo_test_parser::{parse_test_list, Tests, ParseError};
 use log::{info, warn};
@@ -13,7 +13,7 @@ use std::{
 #[derive(Debug, Clone)]
 pub struct ListTestsJob {
     destination: ShadowCopyDestination,
-    build_mode: BuildMode,
+    build_mode: Profile,
     exit_status: Option<ExitStatus>,
     stdout: String,
     stderr: String,
@@ -27,7 +27,7 @@ impl Display for ListTestsJob {
 }
 
 impl ListTestsJob {
-    pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> PendingJob {
+    pub fn new(destination_directory: ShadowCopyDestination, build_mode: Profile) -> PendingJob {
         let kind = JobKind::ListTests(ListTestsJob {
             destination: destination_directory,
             build_mode,
@@ -66,7 +66,7 @@ impl ListTestsJob {
 
         command.arg("test");
         command.arg("-q");
-        if self.build_mode == BuildMode::Release {
+        if self.build_mode == Profile::Release {
             command.arg("--release");
         }
         command.arg("--");

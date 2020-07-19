@@ -19,13 +19,6 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-/// The build mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BuildMode {
-    Debug,
-    Release,
-}
-
 pub trait Job: Display {
     fn id(&self) -> &JobId;
     fn kind(&self) -> &JobKind;
