@@ -1,7 +1,7 @@
-use super::{JobId};
 use crate::{
-    jobs::{CompletionStatus, JobKind, PendingJob},
-    shadow_copy_destination::ShadowCopyDestination, configuration::Profile,
+    configuration::BuildMode,
+    jobs::{CompletionStatus, JobId, JobKind, PendingJob},
+    shadow_copy_destination::ShadowCopyDestination,
 };
 use log::{info, warn};
 use std::{
@@ -12,7 +12,7 @@ use std::{
 #[derive(Debug, Clone)]
 pub struct RunTestsJob {
     destination: ShadowCopyDestination,
-    build_mode: Profile,
+    build_mode: BuildMode,
     exit_status: Option<ExitStatus>,
     stdout: Vec<u8>,
     stderr: Vec<u8>,
@@ -25,7 +25,7 @@ impl Display for RunTestsJob {
 }
 
 impl RunTestsJob {
-    pub fn new(destination_directory: ShadowCopyDestination, build_mode: Profile) -> PendingJob {
+    pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> PendingJob {
         let kind = JobKind::RunTests(RunTestsJob {
             destination: destination_directory,
             build_mode,
@@ -62,11 +62,16 @@ impl RunTestsJob {
         command.arg("test");
         command.current_dir(cwd);
 
-        let output = command
-            .output()
-            .expect("`cargo test` command failed");
+        let output = command.output().expect("`cargo test` command failed");
 
         self.exit_status = Some(output.status);
+
+        let mut completion_status = if output.status.success() {
+            CompletionStatus::Ok
+        } else {
+            CompletionStatus::Unknown
+        };
+
         self.stdout = output.stdout;
         self.stderr = output.stderr;
 
@@ -125,8 +130,6 @@ test tests::test2_failing ... ok
 
 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 */
-
-
 
 /*
 For nightly channels, we can do:

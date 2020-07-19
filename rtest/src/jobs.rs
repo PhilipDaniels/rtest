@@ -60,10 +60,12 @@ impl Job for PendingJob {
 impl PendingJob {
     pub fn execute(self) -> CompletedJob {
         let tmr = stimer!(Level::Info; "execute()", "{}", self.id);
+
         let mut executing_job: ExecutingJob = self.into();
-        let status = executing_job.execute();
-        finish!(tmr, "completed with status={:?}", status);
-        CompletedJob::new(executing_job, status)
+        let completed_job = executing_job.execute();
+
+        finish!(tmr, "completed with status={:?}", completed_job.status);
+        completed_job
     }
 }
 
@@ -103,9 +105,10 @@ impl Job for ExecutingJob {
 }
 
 impl ExecutingJob {
-    fn execute(&mut self) -> CompletionStatus {
+    fn execute(mut self) -> CompletedJob {
+        // Execute the job-specific data.
         let status = self.kind.execute(self.id().clone());
-        status
+        CompletedJob::new(self, status)
     }
 }
 

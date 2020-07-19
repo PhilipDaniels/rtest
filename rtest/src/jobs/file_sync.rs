@@ -1,6 +1,5 @@
-use super::CompletionStatus;
 use crate::{
-    jobs::{JobKind, PendingJob},
+    jobs::{CompletionStatus, JobKind, PendingJob},
     shadow_copy_destination::ShadowCopyDestination,
     source_directory_watcher::FileSyncEvent,
 };

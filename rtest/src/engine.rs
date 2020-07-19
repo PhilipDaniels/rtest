@@ -1,5 +1,5 @@
 use crate::{
-    configuration::Configuration,
+    configuration::{BuildMode, Configuration},
     jobs::{
         BuildTestsJob, CompletedJob, CompletionStatus, Job, JobKind, ListTestsJob, PendingJob,
         RunTestsJob,
@@ -152,7 +152,12 @@ impl JobEngine {
 
                 info!("{}", msg);
 
-                let build_mode = self.configuration.build_mode;
+                let build_mode = match self.configuration.build_mode {
+                    crate::configuration::CompilationMode::None => continue,
+                    crate::configuration::CompilationMode::Debug => BuildMode::Debug,
+                    crate::configuration::CompilationMode::Release => BuildMode::Release,
+                    crate::configuration::CompilationMode::Both => continue,
+                };
 
                 if pending_jobs_lock.is_empty() {
                     if self.build_tests_required.is_true() {

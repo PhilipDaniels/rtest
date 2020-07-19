@@ -1,6 +1,7 @@
 use crate::{
+    configuration::{BuildMode, CompilationMode},
     jobs::{CompletionStatus, JobId, JobKind, PendingJob},
-    shadow_copy_destination::ShadowCopyDestination, configuration::Profile,
+    shadow_copy_destination::ShadowCopyDestination,
 };
 use log::{info, warn};
 use std::{
@@ -16,7 +17,7 @@ use std::{
 #[derive(Debug, Clone)]
 pub struct BuildTestsJob {
     destination: ShadowCopyDestination,
-    build_mode: Profile,
+    build_mode: BuildMode,
     exit_status: Option<ExitStatus>,
     stdout: Vec<u8>,
     stderr: Vec<u8>,
@@ -29,7 +30,7 @@ impl Display for BuildTestsJob {
 }
 
 impl BuildTestsJob {
-    pub fn new(destination_directory: ShadowCopyDestination, build_mode: Profile) -> PendingJob {
+    pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> PendingJob {
         let kind = JobKind::BuildTests(BuildTestsJob {
             destination: destination_directory,
             build_mode,
@@ -70,7 +71,7 @@ impl BuildTestsJob {
         command.arg("--no-run");
         command.arg("--color");
         command.arg("never");
-        if self.build_mode == Profile::Release {
+        if self.build_mode == BuildMode::Release {
             command.arg("--release");
         }
 

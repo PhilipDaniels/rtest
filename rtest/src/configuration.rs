@@ -16,17 +16,28 @@ pub struct Configuration {
 pub struct InnerConfiguration {
     pub source_directory: PathBuf,
     pub destination: ShadowCopyDestination,
-    pub build_mode: Profile,
-    pub test_mode: Profile,
+    pub build_mode: CompilationMode,
+    pub test_mode: CompilationMode,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-/// Specifies what cargo compilation Profile should be applied.
-pub enum Profile {
+/// Specifies what compilation mode should be applied.
+/// At the moment we only support Debug (dev) and Release profiles.
+/// Since Cargo does not yet support named profiles that
+/// is not really a problem.
+pub enum CompilationMode {
     None,
     Debug,
     Release,
     Both,
+}
+
+/// The `BuildMode` is used to parameterise invocations
+/// of cargo subprocesses - do we add "--release"?.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum BuildMode {
+    Debug,
+    Release
 }
 
 impl Deref for Configuration {
@@ -69,19 +80,19 @@ struct CommandLineArguments {
     do_shadow_copy: bool,
     source: PathBuf,
     destination: Option<PathBuf>,
-    build_mode: Profile,
-    test_mode: Profile,
+    build_mode: CompilationMode,
+    test_mode: CompilationMode,
 }
 
-impl FromStr for Profile {
+impl FromStr for CompilationMode {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "none" => Ok(Profile::None),
-            "debug" => Ok(Profile::Debug),
-            "release" => Ok(Profile::Release),
-            "both" => Ok(Profile::Both),
+            "none" => Ok(CompilationMode::None),
+            "debug" => Ok(CompilationMode::Debug),
+            "release" => Ok(CompilationMode::Release),
+            "both" => Ok(CompilationMode::Both),
             _ => Err("no matching CompilationMode"),
         }
     }
@@ -125,9 +136,9 @@ fn get_cli_arguments() -> CommandLineArguments {
 
     let destination = matches.value_of("dest").map(|v| v.into());
 
-    let build_mode = Profile::from_str(matches.value_of("BUILD-MODE").unwrap_or("none"))
+    let build_mode = CompilationMode::from_str(matches.value_of("BUILD-MODE").unwrap_or("none"))
         .expect("Invalid BUILD-MODE");
-    let test_mode = Profile::from_str(matches.value_of("TEST-MODE").unwrap_or("debug"))
+    let test_mode = CompilationMode::from_str(matches.value_of("TEST-MODE").unwrap_or("debug"))
         .expect("Invalid TEST-MODE");
 
     CommandLineArguments {

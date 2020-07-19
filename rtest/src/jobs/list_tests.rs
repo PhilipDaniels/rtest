@@ -1,22 +1,46 @@
 use crate::{
+    configuration::BuildMode,
     jobs::{CompletionStatus, JobId, JobKind, PendingJob},
-    shadow_copy_destination::ShadowCopyDestination, configuration::Profile,
+    shadow_copy_destination::ShadowCopyDestination,
 };
-use cargo_test_parser::{parse_test_list, Tests, ParseError};
+use cargo_test_parser::{parse_test_list, ParseError, Tests};
 use log::{info, warn};
 use std::{
     fmt::Display,
-    process::{Command, ExitStatus},
+    process::{Command, ExitStatus, Output},
 };
+
+/// The output data of a process, converted to a slightly
+/// friendlier string form.
+#[derive(Debug, Clone)]
+pub struct ProcessOutput {
+    exit_status: ExitStatus,
+    stdout: String,
+    stderr: String,
+}
+
+impl From<Output> for ProcessOutput {
+    fn from(output: Output) -> Self {
+        Self {
+            exit_status: output.status,
+            stdout: String::from_utf8_lossy(&output.stdout).into(),
+            stderr: String::from_utf8_lossy(&output.stderr).into(),
+        }
+    }
+}
+
+impl ProcessOutput {
+    pub fn success(&self) -> bool {
+        self.exit_status.success()
+    }
+}
 
 /// Lists the tests. Does not run any of them.
 #[derive(Debug, Clone)]
 pub struct ListTestsJob {
     destination: ShadowCopyDestination,
-    build_mode: Profile,
-    exit_status: Option<ExitStatus>,
-    stdout: String,
-    stderr: String,
+    build_mode: BuildMode,
+    output: Option<ProcessOutput>,
     tests: Vec<()>,
 }
 
@@ -27,13 +51,11 @@ impl Display for ListTestsJob {
 }
 
 impl ListTestsJob {
-    pub fn new(destination_directory: ShadowCopyDestination, build_mode: Profile) -> PendingJob {
+    pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> PendingJob {
         let kind = JobKind::ListTests(ListTestsJob {
             destination: destination_directory,
             build_mode,
-            exit_status: None,
-            stdout: Default::default(),
-            stderr: Default::default(),
+            output: None,
             tests: Default::default(),
         });
 
@@ -66,36 +88,31 @@ impl ListTestsJob {
 
         command.arg("test");
         command.arg("-q");
-        if self.build_mode == Profile::Release {
+        // TODO: Handle this better with a custom enum.
+        if self.build_mode == BuildMode::Release {
             command.arg("--release");
         }
         command.arg("--");
         command.arg("--list");
 
-        let output = command
-            .output()
-            .expect("List tests command failed");
-
-        self.exit_status = Some(output.status);
-        self.stdout = String::from_utf8(output.stdout)
-            .unwrap_or("Error, cannot convert cargo stdout to a string".into());
-        self.stderr = String::from_utf8(output.stderr)
-            .unwrap_or("Error, cannot convert cargo stderr to a string".into());
+        let output: ProcessOutput = command.output().expect("List tests command failed").into();
 
         let msg = format!(
             "{} List tests {}. ExitStatus={:?}, stdout={} bytes, stderr={} bytes",
             parent_job_id,
-            if output.status.success() {
+            if output.exit_status.success() {
                 "succeeded"
             } else {
                 "failed"
             },
-            self.exit_status,
-            self.stdout.len(),
-            self.stderr.len()
+            output.exit_status,
+            output.stdout.len(),
+            output.stderr.len()
         );
 
-        if output.status.success() {
+        self.output = Some(output);
+
+        if self.output.as_ref().unwrap().success() {
             info!("{}", msg);
             CompletionStatus::Ok
         } else {
@@ -108,7 +125,9 @@ impl ListTestsJob {
     /// set of tests. Since this is based on textual parsing, this
     /// can fail. What are all the output variations of cargo?
     pub fn parse_tests(&self) -> Result<Vec<Tests>, ParseError> {
-        parse_test_list(&self.stdout)
-        //Ok(vec![])
+        match &self.output {
+            Some(output) => parse_test_list(&output.stdout),
+            None => Ok(vec![]),
+        }
     }
 }
