@@ -4,13 +4,36 @@ use crate::{
 };
 use clap::{App, Arg};
 use log::info;
-use std::path::PathBuf;
+use std::{ops::Deref, path::PathBuf, str::FromStr, sync::Arc};
 
 /// Represents the global configuration of `rtest` during one run.
 #[derive(Debug, Clone)]
 pub struct Configuration {
+    inner: Arc<InnerConfiguration>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InnerConfiguration {
     pub source_directory: PathBuf,
     pub destination: ShadowCopyDestination,
+    pub build_mode: CompilationMode,
+    pub test_mode: CompilationMode,
+}
+
+#[derive(Debug, Copy, Clone)]
+/// Specifies what should be compiled.
+pub enum CompilationMode {
+    None,
+    Debug,
+    Release,
+    Both,
+}
+
+impl Deref for Configuration {
+    type Target = InnerConfiguration;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
 pub fn new() -> Configuration {
@@ -32,8 +55,12 @@ pub fn new() -> Configuration {
     };
 
     Configuration {
-        source_directory: args.source,
-        destination,
+        inner: Arc::new(InnerConfiguration {
+            source_directory: args.source,
+            destination,
+            build_mode: args.build_mode,
+            test_mode: args.test_mode,
+        }),
     }
 }
 
@@ -42,6 +69,22 @@ struct CommandLineArguments {
     do_shadow_copy: bool,
     source: PathBuf,
     destination: Option<PathBuf>,
+    build_mode: CompilationMode,
+    test_mode: CompilationMode,
+}
+
+impl FromStr for CompilationMode {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "none" => Ok(CompilationMode::None),
+            "debug" => Ok(CompilationMode::Debug),
+            "release" => Ok(CompilationMode::Release),
+            "both" => Ok(CompilationMode::Both),
+            _ => Err("no matching CompilationMode"),
+        }
+    }
 }
 
 fn get_cli_arguments() -> CommandLineArguments {
@@ -50,13 +93,27 @@ fn get_cli_arguments() -> CommandLineArguments {
         .author(CARGO_PKG_AUTHORS)
         .about(CARGO_PKG_DESCRIPTION)
         .arg(
-            Arg::new("shadow-copy")
+            Arg::with_name("shadow-copy")
                 .about("Do not shadow copy, use the original source directory for compilations")
                 .short('n')
                 .long("no-copy"),
         )
+        .arg(
+            Arg::with_name("BUILD-MODE")
+                .about("Specifies compilation mode for builds")
+                .short('b')
+                .long("build-mode")
+                .possible_values(&["none", "debug", "release", "both"]),
+        )
+        .arg(
+            Arg::with_name("TEST-MODE")
+                .about("Specifies compilation mode for tests")
+                .short('t')
+                .long("test-mode")
+                .possible_values(&["none", "debug", "release", "both"]),
+        )
         .arg("[source] 'The source directory (defaults to cwd)'")
-        .arg("[dest] 'The destination directory for shadow copies' (defaults to a temp folder)")
+        .arg("[dest] 'The destination directory for shadow copies (defaults to a temp folder)'")
         .get_matches();
 
     let do_shadow_copy = !matches.is_present("shadow-copy");
@@ -68,9 +125,16 @@ fn get_cli_arguments() -> CommandLineArguments {
 
     let destination = matches.value_of("dest").map(|v| v.into());
 
+    let build_mode = CompilationMode::from_str(matches.value_of("BUILD-MODE").unwrap_or("none"))
+        .expect("Invalid BUILD-MODE");
+    let test_mode = CompilationMode::from_str(matches.value_of("TEST-MODE").unwrap_or("debug"))
+        .expect("Invalid TEST-MODE");
+
     CommandLineArguments {
         do_shadow_copy,
         source,
         destination,
+        build_mode,
+        test_mode,
     }
 }
