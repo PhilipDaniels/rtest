@@ -153,10 +153,10 @@ impl JobEngine {
                 info!("{}", msg);
 
                 let build_mode = match self.configuration.build_mode {
-                    crate::configuration::CompilationMode::None => continue,
+                    crate::configuration::CompilationMode::None => BuildMode::Debug,
                     crate::configuration::CompilationMode::Debug => BuildMode::Debug,
                     crate::configuration::CompilationMode::Release => BuildMode::Release,
-                    crate::configuration::CompilationMode::Both => continue,
+                    crate::configuration::CompilationMode::Both => BuildMode::Debug,
                 };
 
                 if pending_jobs_lock.is_empty() {
