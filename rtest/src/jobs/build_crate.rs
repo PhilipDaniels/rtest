@@ -1,24 +1,20 @@
 use crate::{
-    configuration::{BuildMode, CompilationMode},
-    jobs::{CompletionStatus, JobId, JobKind, PendingJob},
+    configuration::BuildMode,
+    jobs::{gather_process_output, CompletionStatus, JobId, JobKind, PendingJob, ProcessOutput},
     shadow_copy_destination::ShadowCopyDestination,
 };
-use log::{info, warn};
-use std::{
-    fmt::Display,
-    process::{Command, ExitStatus},
-};
+use log::info;
+use std::{fmt::Display, process::Command};
 
-/// Builds the crate. This makes the final product available, as a convenience.
+/// Builds the crate (or workspace). This makes the final product(s) available
+/// quickly, as a convenience to the user.
 ///
 /// See also the `BuildTestsJob`.
 #[derive(Debug, Clone)]
 pub struct BuildCrateJob {
     destination: ShadowCopyDestination,
     build_mode: BuildMode,
-    exit_status: Option<ExitStatus>,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
+    output: Option<ProcessOutput>,
 }
 
 impl Display for BuildCrateJob {
@@ -32,9 +28,7 @@ impl BuildCrateJob {
         let kind = JobKind::BuildCrate(BuildCrateJob {
             destination: destination_directory,
             build_mode,
-            exit_status: None,
-            stdout: Vec::default(),
-            stderr: Vec::default(),
+            output: None,
         });
 
         kind.into()
@@ -45,7 +39,7 @@ impl BuildCrateJob {
         let cwd = if self.destination.is_copying() {
             let dir = self.destination.destination_directory().unwrap();
             info!(
-                "{} Building crate in shadow copy directory {}",
+                "{} Building crate or workspace in shadow copy directory {}",
                 parent_job_id,
                 dir.display()
             );
@@ -53,15 +47,14 @@ impl BuildCrateJob {
         } else {
             let dir = self.destination.source_directory();
             info!(
-                "{} Building crate in the original directory {}",
+                "{} Building crate or workspace in the original directory {}",
                 parent_job_id,
                 dir.display()
             );
             dir
         };
 
-        // This will build both the main code and the test code, but won't
-        // actually run the tests.
+        // cargo build --color never [--release]
         let mut command = Command::new("cargo");
         command.current_dir(cwd);
 
@@ -72,31 +65,11 @@ impl BuildCrateJob {
             command.arg("--release");
         }
 
-        let output = command.output().expect("Build tests command failed");
+        self.output = match gather_process_output(command, "Build crate/workspace", parent_job_id) {
+            Ok(output) => Some(output),
+            Err(msg) => return msg.into(),
+        };
 
-        self.exit_status = Some(output.status);
-        self.stdout = output.stdout;
-        self.stderr = output.stderr;
-
-        let msg = format!(
-            "{} Build crate {}. ExitStatus={:?}, stdout={} bytes, stderr={} bytes",
-            parent_job_id,
-            if output.status.success() {
-                "succeeded"
-            } else {
-                "failed"
-            },
-            self.exit_status,
-            self.stdout.len(),
-            self.stderr.len()
-        );
-
-        if output.status.success() {
-            info!("{}", msg);
-            CompletionStatus::Ok
-        } else {
-            warn!("{}", msg);
-            msg.into()
-        }
+        CompletionStatus::Ok
     }
 }

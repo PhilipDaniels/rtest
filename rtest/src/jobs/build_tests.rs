@@ -1,13 +1,10 @@
 use crate::{
-    configuration::{BuildMode, CompilationMode},
-    jobs::{CompletionStatus, JobId, JobKind, PendingJob},
+    configuration::BuildMode,
+    jobs::{gather_process_output, CompletionStatus, JobId, JobKind, PendingJob, ProcessOutput},
     shadow_copy_destination::ShadowCopyDestination,
 };
-use log::{info, warn};
-use std::{
-    fmt::Display,
-    process::{Command, ExitStatus},
-};
+use log::info;
+use std::{fmt::Display, process::Command};
 
 /// Builds the tests **only**. This will fail if there is a compilation error in the main (non-test)
 /// code. The difference from `cargo build` is that it doesn't build the final crate target (such
@@ -18,9 +15,7 @@ use std::{
 pub struct BuildTestsJob {
     destination: ShadowCopyDestination,
     build_mode: BuildMode,
-    exit_status: Option<ExitStatus>,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
+    output: Option<ProcessOutput>,
 }
 
 impl Display for BuildTestsJob {
@@ -34,9 +29,7 @@ impl BuildTestsJob {
         let kind = JobKind::BuildTests(BuildTestsJob {
             destination: destination_directory,
             build_mode,
-            exit_status: None,
-            stdout: Vec::default(),
-            stderr: Vec::default(),
+            output: None,
         });
 
         kind.into()
@@ -47,7 +40,7 @@ impl BuildTestsJob {
         let cwd = if self.destination.is_copying() {
             let dir = self.destination.destination_directory().unwrap();
             info!(
-                "{} Building test in shadow copy directory {}",
+                "{} Building tests in shadow copy directory {}",
                 parent_job_id,
                 dir.display()
             );
@@ -64,6 +57,7 @@ impl BuildTestsJob {
 
         // This will build both the main code and the test code, but won't
         // actually run the tests.
+        // cargo test --no-run --color never [--release]
         let mut command = Command::new("cargo");
         command.current_dir(cwd);
 
@@ -75,31 +69,11 @@ impl BuildTestsJob {
             command.arg("--release");
         }
 
-        let output = command.output().expect("Build tests command failed");
+        self.output = match gather_process_output(command, "Build tests", parent_job_id) {
+            Ok(output) => Some(output),
+            Err(msg) => return msg.into(),
+        };
 
-        self.exit_status = Some(output.status);
-        self.stdout = output.stdout;
-        self.stderr = output.stderr;
-
-        let msg = format!(
-            "{} Build tests {}. ExitStatus={:?}, stdout={} bytes, stderr={} bytes",
-            parent_job_id,
-            if output.status.success() {
-                "succeeded"
-            } else {
-                "failed"
-            },
-            self.exit_status,
-            self.stdout.len(),
-            self.stderr.len()
-        );
-
-        if output.status.success() {
-            info!("{}", msg);
-            CompletionStatus::Ok
-        } else {
-            warn!("{}", msg);
-            msg.into()
-        }
+        CompletionStatus::Ok
     }
 }

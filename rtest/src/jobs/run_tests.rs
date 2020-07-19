@@ -1,21 +1,16 @@
 use crate::{
     configuration::BuildMode,
-    jobs::{CompletionStatus, JobId, JobKind, PendingJob},
+    jobs::{gather_process_output, CompletionStatus, JobId, JobKind, PendingJob, ProcessOutput},
     shadow_copy_destination::ShadowCopyDestination,
 };
-use log::{info, warn};
-use std::{
-    fmt::Display,
-    process::{Command, ExitStatus},
-};
+use log::info;
+use std::{fmt::Display, process::Command};
 
 #[derive(Debug, Clone)]
 pub struct RunTestsJob {
     destination: ShadowCopyDestination,
     build_mode: BuildMode,
-    exit_status: Option<ExitStatus>,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
+    output: Option<ProcessOutput>,
 }
 
 impl Display for RunTestsJob {
@@ -29,9 +24,7 @@ impl RunTestsJob {
         let kind = JobKind::RunTests(RunTestsJob {
             destination: destination_directory,
             build_mode,
-            exit_status: None,
-            stdout: Vec::default(),
-            stderr: Vec::default(),
+            output: None,
         });
 
         kind.into()
@@ -62,40 +55,12 @@ impl RunTestsJob {
         command.arg("test");
         command.current_dir(cwd);
 
-        let output = command.output().expect("`cargo test` command failed");
-
-        self.exit_status = Some(output.status);
-
-        let mut completion_status = if output.status.success() {
-            CompletionStatus::Ok
-        } else {
-            CompletionStatus::Unknown
+        self.output = match gather_process_output(command, "Run tests", parent_job_id) {
+            Ok(output) => Some(output),
+            Err(msg) => return msg.into(),
         };
 
-        self.stdout = output.stdout;
-        self.stderr = output.stderr;
-
-        let num_passed = 0;
-        let num_failed = 0;
-
-        let msg = format!(
-            "{} 'cargo test' {}. ExitStatus={:?}, Passed={}, Failed={}, stdout={} bytes, stderr={} bytes",
-            parent_job_id,
-            if output.status.success() { "succeeded" } else { "failed" },
-            self.exit_status,
-            num_passed,
-            num_failed,
-            self.stdout.len(),
-            self.stderr.len()
-        );
-
-        if output.status.success() {
-            info!("{}", msg);
-            CompletionStatus::Ok
-        } else {
-            warn!("{}", msg);
-            msg.into()
-        }
+        CompletionStatus::Ok
     }
 }
 

@@ -1,39 +1,11 @@
 use crate::{
     configuration::BuildMode,
-    jobs::{CompletionStatus, JobId, JobKind, PendingJob},
+    jobs::{gather_process_output, CompletionStatus, JobId, JobKind, PendingJob, ProcessOutput},
     shadow_copy_destination::ShadowCopyDestination,
 };
 use cargo_test_parser::{parse_test_list, ParseError, Tests};
-use log::{info, warn};
-use std::{
-    fmt::Display,
-    process::{Command, ExitStatus, Output},
-};
-
-/// The output data of a process, converted to a slightly
-/// friendlier string form.
-#[derive(Debug, Clone)]
-pub struct ProcessOutput {
-    exit_status: ExitStatus,
-    stdout: String,
-    stderr: String,
-}
-
-impl From<Output> for ProcessOutput {
-    fn from(output: Output) -> Self {
-        Self {
-            exit_status: output.status,
-            stdout: String::from_utf8_lossy(&output.stdout).into(),
-            stderr: String::from_utf8_lossy(&output.stderr).into(),
-        }
-    }
-}
-
-impl ProcessOutput {
-    pub fn success(&self) -> bool {
-        self.exit_status.success()
-    }
-}
+use log::info;
+use std::{fmt::Display, process::Command};
 
 /// Lists the tests. Does not run any of them.
 #[derive(Debug, Clone)]
@@ -82,43 +54,24 @@ impl ListTestsJob {
             dir
         };
 
-        // cargo test -q -- --list
+        // cargo test -q [--release] -- --list
         let mut command = Command::new("cargo");
         command.current_dir(cwd);
 
         command.arg("test");
         command.arg("-q");
-        // TODO: Handle this better with a custom enum.
         if self.build_mode == BuildMode::Release {
             command.arg("--release");
         }
         command.arg("--");
         command.arg("--list");
 
-        let output: ProcessOutput = command.output().expect("List tests command failed").into();
+        self.output = match gather_process_output(command, "Lists tests", parent_job_id) {
+            Ok(output) => Some(output),
+            Err(msg) => return msg.into(),
+        };
 
-        let msg = format!(
-            "{} List tests {}. ExitStatus={:?}, stdout={} bytes, stderr={} bytes",
-            parent_job_id,
-            if output.exit_status.success() {
-                "succeeded"
-            } else {
-                "failed"
-            },
-            output.exit_status,
-            output.stdout.len(),
-            output.stderr.len()
-        );
-
-        self.output = Some(output);
-
-        if self.output.as_ref().unwrap().success() {
-            info!("{}", msg);
-            CompletionStatus::Ok
-        } else {
-            warn!("{}", msg);
-            msg.into()
-        }
+        CompletionStatus::Ok
     }
 
     /// Parses the cargo test output from stdout and returns the

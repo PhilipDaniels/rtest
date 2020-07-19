@@ -13,9 +13,11 @@ pub use run_tests::RunTestsJob;
 pub use shadow_copy::ShadowCopyJob;
 
 use chrono::{DateTime, Utc};
+use log::{info, warn};
 use logging_timer::{finish, stimer, Level};
 use std::{
     fmt::Display,
+    process::Command,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -244,5 +246,63 @@ impl JobId {
         Self {
             id: ID.fetch_add(1, Ordering::SeqCst),
         }
+    }
+}
+
+/// The output data of a process, converted to a slightly
+/// friendlier string form.
+#[derive(Debug, Clone)]
+pub struct ProcessOutput {
+    exit_status: std::process::ExitStatus,
+    stdout: String,
+    stderr: String,
+}
+
+impl From<std::process::Output> for ProcessOutput {
+    fn from(output: std::process::Output) -> Self {
+        Self {
+            exit_status: output.status,
+            stdout: String::from_utf8_lossy(&output.stdout).into(),
+            stderr: String::from_utf8_lossy(&output.stderr).into(),
+        }
+    }
+}
+
+impl ProcessOutput {
+    pub fn success(&self) -> bool {
+        self.exit_status.success()
+    }
+}
+
+fn gather_process_output(
+    mut command: Command,
+    description: &str,
+    parent_job_id: JobId,
+) -> Result<ProcessOutput, String> {
+    let output: ProcessOutput = match command.output() {
+        Ok(result) => result.into(),
+        Err(e) => return Err(format!("{} process start failed, err={}", description, e)),
+    };
+
+    let msg = format!(
+        "{} {} {}. ExitStatus={:?}, stdout={} bytes, stderr={} bytes",
+        parent_job_id,
+        description,
+        if output.exit_status.success() {
+            "succeeded"
+        } else {
+            "failed"
+        },
+        output.exit_status,
+        output.stdout.len(),
+        output.stderr.len()
+    );
+
+    if output.success() {
+        info!("{}", msg);
+        Ok(output)
+    } else {
+        warn!("{}", msg);
+        Err(msg)
     }
 }
