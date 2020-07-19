@@ -34,13 +34,12 @@ fn main() {
     // If a shadow copy operation is required, kick one off.
     // This & is important to ensure the temp dir gets dropped when we exit,
     // otherwise it gets moved and dropped before we do the shadow-copy!
-    let dest_dir =
-        ShadowCopyDestination::new(&config.source_directory, &config.destination_directory);
+    let dest = ShadowCopyDestination::new(&config.source_directory, &config.destination_directory);
 
-    let engine = JobEngine::new(dest_dir.clone());
+    let engine = JobEngine::new(dest.clone());
 
-    if dest_dir.is_copying() {
-        let job = ShadowCopyJob::new(dest_dir.clone());
+    if dest.is_copying() {
+        let job = ShadowCopyJob::new(dest.clone());
         engine.add_job(job);
 
         // Then watch for incremental file changes. Use another thread to
@@ -48,11 +47,15 @@ fn main() {
         let (sender, receiver) = channel::<FileSyncEvent>();
         source_directory_watcher::start_watching(&config.source_directory, sender);
 
-        let engine2 = engine.clone();
-        std::thread::spawn(move || {
-            for event in receiver {
-                let job = FileSyncJob::new(dest_dir.clone(), event);
-                engine2.add_job(job);
+        std::thread::spawn({
+            let engine = engine.clone();
+            let dest = dest.clone();
+
+            move || {
+                for event in receiver {
+                    let job = FileSyncJob::new(dest.clone(), event);
+                    engine.add_job(job);
+                }
             }
         });
     }

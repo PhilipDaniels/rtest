@@ -124,8 +124,16 @@ impl JobEngine {
                 // This is potentially time consuming, everything else in this
                 // method should be fast (hence the locks will be released quickly).
                 let completed_job = job.execute();
+                let kind = completed_job.kind();
 
-                self.set_flags(&completed_job);
+                // TODO: At this point, we may have listed all the tests.
+                // So we need to be maintaining our 'Program State' variable
+                // which lists all the tests we have.
+                //
+                // Also time to think about global configuration? That is also
+                // a part of state.
+
+                self.set_engine_state_flags(&completed_job);
                 let pending_jobs_lock = self.pending_jobs.lock().unwrap();
                 let mut completed_jobs_lock = self.completed_jobs.lock().unwrap();
 
@@ -201,7 +209,7 @@ impl JobEngine {
     }
 
     /// Sets the various state flags based on the job and its completion status.
-    fn set_flags(&self, job: &CompletedJob) {
+    fn set_engine_state_flags(&self, job: &CompletedJob) {
         match (job.kind(), job.completion_status()) {
             (JobKind::ShadowCopy(_), CompletionStatus::Ok) => {
                 self.build_tests_required.set_true();

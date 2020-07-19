@@ -64,7 +64,7 @@ impl RunTestsJob {
 
         let output = command
             .output()
-            .expect("`cargo test` command failed to start");
+            .expect("`cargo test` command failed");
 
         self.exit_status = Some(output.status);
         self.stdout = output.stdout;

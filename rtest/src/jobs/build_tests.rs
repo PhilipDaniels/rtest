@@ -74,7 +74,7 @@ impl BuildTestsJob {
             command.arg("--release");
         }
 
-        let output = command.output().expect("Build tests command failed to start");
+        let output = command.output().expect("Build tests command failed");
 
         self.exit_status = Some(output.status);
         self.stdout = output.stdout;

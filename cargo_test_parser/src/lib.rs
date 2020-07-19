@@ -4,10 +4,11 @@ mod parse_context;
 mod parse_error;
 mod utils;
 
+pub use parse_error::ParseError;
+
 use crate_name::CrateName;
 use doc_test::DocTest;
 use parse_context::ParseContext;
-use parse_error::ParseError;
 use utils::parse_leading_usize;
 
 /// Parses the output of `cargo test -- --list` and returns the result.

@@ -2,6 +2,7 @@ use crate::{
     jobs::{BuildMode, CompletionStatus, JobId, JobKind, PendingJob},
     shadow_copy_destination::ShadowCopyDestination,
 };
+use cargo_test_parser::{parse_test_list, Tests, ParseError};
 use log::{info, warn};
 use std::{
     fmt::Display,
@@ -14,9 +15,9 @@ pub struct ListTestsJob {
     destination: ShadowCopyDestination,
     build_mode: BuildMode,
     exit_status: Option<ExitStatus>,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-    tests: Vec<String>,
+    stdout: String,
+    stderr: String,
+    tests: Vec<()>,
 }
 
 impl Display for ListTestsJob {
@@ -73,12 +74,13 @@ impl ListTestsJob {
 
         let output = command
             .output()
-            .expect("List tests command failed to start");
+            .expect("List tests command failed");
 
         self.exit_status = Some(output.status);
-        self.stdout = output.stdout;
-        self.stderr = output.stderr;
-        self.tests = Self::parse_tests(&self.stdout);
+        self.stdout = String::from_utf8(output.stdout)
+            .unwrap_or("Error, cannot convert cargo stdout to a string".into());
+        self.stderr = String::from_utf8(output.stderr)
+            .unwrap_or("Error, cannot convert cargo stderr to a string".into());
 
         let msg = format!(
             "{} List tests {}. ExitStatus={:?}, stdout={} bytes, stderr={} bytes",
@@ -102,7 +104,11 @@ impl ListTestsJob {
         }
     }
 
-    fn parse_tests(stdout: &[u8]) -> Vec<String> {
-        vec![]
+    /// Parses the cargo test output from stdout and returns the
+    /// set of tests. Since this is based on textual parsing, this
+    /// can fail. What are all the output variations of cargo?
+    pub fn parse_tests(&self) -> Result<Vec<Tests>, ParseError> {
+        parse_test_list(&self.stdout)
+        //Ok(vec![])
     }
 }

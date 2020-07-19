@@ -73,7 +73,7 @@ impl BuildCrateJob {
 
         let output = command
             .output()
-            .expect("Build tests command failed to start");
+            .expect("Build tests command failed");
 
         self.exit_status = Some(output.status);
         self.stdout = output.stdout;
