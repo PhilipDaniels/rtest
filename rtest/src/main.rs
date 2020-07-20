@@ -6,10 +6,11 @@ use std::{io::Write, sync::mpsc::channel};
 
 mod configuration;
 mod engine;
-#[path ="jobs/jobs.rs"]
+#[path = "jobs/jobs.rs"]
 mod jobs;
 mod shadow_copy_destination;
 mod source_directory_watcher;
+mod state;
 mod thread_clutch;
 mod ui;
 mod utils;
@@ -17,6 +18,7 @@ mod utils;
 use engine::JobEngine;
 use jobs::{FileSyncJob, ShadowCopyJob};
 use source_directory_watcher::FileSyncEvent;
+use state::State;
 use ui::build_main_window;
 
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
@@ -31,6 +33,7 @@ fn main() {
     let config = configuration::new();
     info!("{:?}", config);
 
+    let state = State::new();
     let engine = JobEngine::new(config.clone());
 
     // If a shadow copy operation is required, kick one off.

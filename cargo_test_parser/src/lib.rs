@@ -5,8 +5,7 @@ mod parse_error;
 mod utils;
 
 pub use parse_error::ParseError;
-
-use crate_name::CrateName;
+pub use crate_name::CrateName;
 use doc_test::DocTest;
 use parse_context::ParseContext;
 use utils::parse_leading_usize;
