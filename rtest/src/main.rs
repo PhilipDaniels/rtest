@@ -6,6 +6,7 @@ use std::{io::Write, sync::mpsc::channel};
 
 mod configuration;
 mod engine;
+#[path ="jobs/jobs.rs"]
 mod jobs;
 mod shadow_copy_destination;
 mod source_directory_watcher;
