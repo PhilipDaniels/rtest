@@ -132,7 +132,7 @@ impl JobEngine {
                     JobKind::ShadowCopy(_) => {}
                     JobKind::FileSync(_) => {}
                     JobKind::BuildAllTests(_) => {}
-                    JobKind::BuildCrate(_) => {}
+                    JobKind::BuildWorkspace(_) => {}
                     JobKind::ListAllTests(kind) => {
                         let tests = kind.parse_tests().unwrap();
                         self.state.update_test_list(&tests);
@@ -248,8 +248,8 @@ impl JobEngine {
 
             // Having a built crate available is just a convenience. It doesn't affect
             // the main flow of build tests -> list tests -> run tests.
-            (JobKind::BuildCrate(_), CompletionStatus::Ok) => {}
-            (JobKind::BuildCrate(_), CompletionStatus::Error(_)) => {}
+            (JobKind::BuildWorkspace(_), CompletionStatus::Ok) => {}
+            (JobKind::BuildWorkspace(_), CompletionStatus::Error(_)) => {}
 
             (JobKind::ListAllTests(_), CompletionStatus::Ok) => {
                 self.list_tests_required.set_false();
