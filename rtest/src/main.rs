@@ -34,7 +34,7 @@ fn main() {
     info!("{:?}", config);
 
     let state = State::new();
-    let engine = JobEngine::new(config.clone());
+    let engine = JobEngine::new(config.clone(), state.clone());
 
     // If a shadow copy operation is required, kick one off.
     if config.destination.is_copying() {

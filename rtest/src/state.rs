@@ -1,16 +1,16 @@
 use cargo_test_parser::Tests;
+use log::info;
 use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::HashMap,
     hash::Hash,
-    ops::Deref,
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 /// Represents the program state (excluding the engine).
 /// Basically this is the list of known tests and their state.
 #[derive(Clone)]
 pub struct State {
-    inner: Arc<InnerState>,
+    inner: Arc<Mutex<InnerState>>,
 }
 
 pub struct InnerState {
@@ -64,6 +64,11 @@ impl InnerState {
     }
 
     pub fn update_test_list(&mut self, test_list: &[Tests]) {
+        info!(
+            "Updating test list in State, passed {} crates",
+            test_list.len()
+        );
+
         for t in test_list.iter() {
             self.update_test_list_for_crate(t);
         }
@@ -100,6 +105,7 @@ impl InnerState {
             }
         }
         crt.unit_tests = updated_unit_tests;
+        info!("There are now {} tests for crate '{}'", crt.unit_tests.len(), crt.crate_name.basename);
 
         // TODO: Repeat for the doc tests.
         // for &doc_test in &test.tests {}
@@ -111,17 +117,28 @@ impl InnerState {
 impl State {
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(InnerState::new()),
+            inner: Arc::new(Mutex::new(InnerState::new())),
         }
+    }
+
+    pub fn update_test_list(&mut self, tests: &[Tests]) {
+        let mut guard = self.inner.lock().unwrap();
+        guard.update_test_list(tests);
     }
 }
 
-impl Deref for State {
-    type Target = InnerState;
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
+// impl Deref for State {
+//     type Target = InnerState;
+//     fn deref(&self) -> &Self::Target {
+//         &self.inner
+//     }
+// }
+
+// impl DerefMut for State {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.inner
+//     }
+// }
 
 impl CrateTests {
     fn new(name: &cargo_test_parser::CrateName<'_>) -> Self {

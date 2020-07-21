@@ -1,18 +1,19 @@
 use crate::{
     configuration::BuildMode,
-    jobs::{gather_process_output, CompletionStatus, JobId, JobKind, PendingJob, ProcessOutput},
+    jobs::{CompletionStatus, JobId, JobKind, PendingJob},
     shadow_copy_destination::ShadowCopyDestination,
 };
 use cargo_test_parser::{parse_test_list, ParseError, Tests};
+use duct::cmd;
 use log::info;
-use std::{fmt::Display, process::Command};
+use std::fmt::Display;
 
 /// Lists the tests. Does not run any of them.
 #[derive(Debug, Clone)]
 pub struct ListTestsJob {
     destination: ShadowCopyDestination,
     build_mode: BuildMode,
-    output: Option<ProcessOutput>,
+    output: String,
     tests: Vec<()>,
 }
 
@@ -27,7 +28,7 @@ impl ListTestsJob {
         let kind = JobKind::ListTests(ListTestsJob {
             destination: destination_directory,
             build_mode,
-            output: None,
+            output: Default::default(),
             tests: Default::default(),
         });
 
@@ -54,21 +55,21 @@ impl ListTestsJob {
             dir
         };
 
-        // cargo test -q [--release] -- --list
-        let mut command = Command::new("cargo");
-        command.current_dir(cwd);
-
-        command.arg("test");
-        command.arg("-q");
+        let mut args = Vec::new();
+        args.push("test");
+        args.push("--color");
+        args.push("never");
         if self.build_mode == BuildMode::Release {
-            command.arg("--release");
+            args.push("--release");
         }
-        command.arg("--");
-        command.arg("--list");
+        args.push("--");
+        args.push("--list");
 
-        self.output = match gather_process_output(command, "Lists tests", parent_job_id) {
-            Ok(output) => Some(output),
-            Err(msg) => return msg.into(),
+        let cmd = cmd("cargo", args);
+
+        self.output = match cmd.stderr_to_stdout().read() {
+            Ok(output) => output,
+            Err(err) => return err.to_string().into(),
         };
 
         CompletionStatus::Ok
@@ -78,9 +79,7 @@ impl ListTestsJob {
     /// set of tests. Since this is based on textual parsing, this
     /// can fail. What are all the output variations of cargo?
     pub fn parse_tests(&self) -> Result<Vec<Tests>, ParseError> {
-        match &self.output {
-            Some(output) => parse_test_list(&output.stdout),
-            None => Ok(vec![]),
-        }
+        //info!("PARSING TEST LIST: {}", &self.output);
+        parse_test_list(&self.output)
     }
 }

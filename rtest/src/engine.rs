@@ -4,7 +4,7 @@ use crate::{
         BuildTestsJob, CompletedJob, CompletionStatus, Job, JobKind, ListTestsJob, PendingJob,
         RunTestsJob,
     },
-    thread_clutch::ThreadClutch,
+    thread_clutch::ThreadClutch, state::State,
 };
 use log::info;
 use std::collections::VecDeque;
@@ -31,9 +31,10 @@ ELSE
 
 */
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct JobEngine {
     configuration: Configuration,
+    state: State,
 
     /// The list of pending (yet to be executed) jobs.
     pending_jobs: Arc<Mutex<VecDeque<PendingJob>>>,
@@ -61,9 +62,10 @@ pub struct JobEngine {
 
 impl JobEngine {
     /// Creates a new job engine that is running and ready to process jobs.
-    pub fn new(configuration: Configuration) -> Self {
+    pub fn new(configuration: Configuration, state: State) -> Self {
         let this = Self {
             configuration,
+            state,
             pending_jobs: Default::default(),
             executing_job: Default::default(),
             completed_jobs: Default::default(),
@@ -124,14 +126,19 @@ impl JobEngine {
                 // This is potentially time consuming, everything else in this
                 // method should be fast (hence the locks will be released quickly).
                 let completed_job = job.execute();
-                let kind = completed_job.kind();
 
-                // TODO: At this point, we may have listed all the tests.
-                // So we need to be maintaining our 'Program State' variable
-                // which lists all the tests we have.
-                //
-                // Also time to think about global configuration? That is also
-                // a part of state.
+                let kind = completed_job.kind();
+                match kind {
+                    JobKind::ShadowCopy(_) => {}
+                    JobKind::FileSync(_) => {}
+                    JobKind::BuildTests(_) => {}
+                    JobKind::BuildCrate(_) => {}
+                    JobKind::ListTests(kind) => {
+                        let tests = kind.parse_tests().unwrap();
+                        self.state.update_test_list(&tests);
+                    }
+                    JobKind::RunTests(_) => {}
+                }
 
                 self.set_engine_state_flags(&completed_job);
                 let pending_jobs_lock = self.pending_jobs.lock().unwrap();

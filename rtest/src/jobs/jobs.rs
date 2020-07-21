@@ -63,7 +63,7 @@ impl PendingJob {
     pub fn execute(self) -> CompletedJob {
         let tmr = stimer!(Level::Info; "execute()", "{}", self.id);
 
-        let mut executing_job: ExecutingJob = self.into();
+        let executing_job: ExecutingJob = self.into();
         let completed_job = executing_job.execute();
 
         finish!(tmr, "completed with status={:?}", completed_job.status);
