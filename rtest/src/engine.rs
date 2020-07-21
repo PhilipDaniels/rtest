@@ -1,7 +1,7 @@
 use crate::{
     configuration::{BuildMode, Configuration},
     jobs::{
-        BuildTestsJob, CompletedJob, CompletionStatus, Job, JobKind, ListTestsJob, PendingJob,
+        BuildTestsJob, CompletedJob, CompletionStatus, Job, JobKind, ListAllTestsJob, PendingJob,
         RunTestsJob,
     },
     thread_clutch::ThreadClutch, state::State,
@@ -133,7 +133,7 @@ impl JobEngine {
                     JobKind::FileSync(_) => {}
                     JobKind::BuildTests(_) => {}
                     JobKind::BuildCrate(_) => {}
-                    JobKind::ListTests(kind) => {
+                    JobKind::ListAllTests(kind) => {
                         let tests = kind.parse_tests().unwrap();
                         self.state.update_test_list(&tests);
                     }
@@ -173,7 +173,7 @@ impl JobEngine {
                         self.add_job_inner(job, pending_jobs_lock);
                     } else if self.list_tests_required.is_true() {
                         let job =
-                            ListTestsJob::new(self.configuration.destination.clone(), build_mode);
+                            ListAllTestsJob::new(self.configuration.destination.clone(), build_mode);
                         self.add_job_inner(job, pending_jobs_lock);
                     } else if self.run_tests_required.is_true() {
                         let job =
@@ -251,11 +251,11 @@ impl JobEngine {
             (JobKind::BuildCrate(_), CompletionStatus::Ok) => {}
             (JobKind::BuildCrate(_), CompletionStatus::Error(_)) => {}
 
-            (JobKind::ListTests(_), CompletionStatus::Ok) => {
+            (JobKind::ListAllTests(_), CompletionStatus::Ok) => {
                 self.list_tests_required.set_false();
                 self.run_tests_required.set_true();
             }
-            (JobKind::ListTests(_), CompletionStatus::Error(_)) => {
+            (JobKind::ListAllTests(_), CompletionStatus::Error(_)) => {
                 // To prevent recursion, we need to wait till we get another file copy.
                 self.list_tests_required.set_false();
             }

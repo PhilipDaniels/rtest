@@ -60,6 +60,15 @@ impl ShadowCopyDestination {
         }
     }
 
+    /// Returns the effective current working directory.
+    pub fn cwd(&self) -> &Path {
+        if self.is_copying() {
+            self.destination_directory().unwrap()
+        } else {
+            &self.source_directory
+        }
+    }
+
     /// Copies a `source_file` from the source directory to the destination directory.
     /// This is a no-op if we are not actually shadow copying.
     pub fn copy_file(&self, source_file: &Path) -> bool {

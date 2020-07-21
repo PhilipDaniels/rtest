@@ -1,14 +1,14 @@
 mod build_crate;
 mod build_tests;
 mod file_sync;
-mod list_tests;
+mod list_all_tests;
 mod run_tests;
 mod shadow_copy;
 
 pub use build_crate::BuildCrateJob;
 pub use build_tests::BuildTestsJob;
 pub use file_sync::FileSyncJob;
-pub use list_tests::ListTestsJob;
+pub use list_all_tests::ListAllTestsJob;
 pub use run_tests::RunTestsJob;
 pub use shadow_copy::ShadowCopyJob;
 
@@ -192,7 +192,7 @@ pub enum JobKind {
     BuildCrate(BuildCrateJob),
 
     /// List all tests.
-    ListTests(ListTestsJob),
+    ListAllTests(ListAllTestsJob),
 
     RunTests(RunTestsJob),
 }
@@ -204,7 +204,7 @@ impl Display for JobKind {
             JobKind::FileSync(file_sync_job) => file_sync_job.fmt(f),
             JobKind::BuildCrate(build_crate_job) => build_crate_job.fmt(f),
             JobKind::BuildTests(build_tests_job) => build_tests_job.fmt(f),
-            JobKind::ListTests(list_tests_job) => list_tests_job.fmt(f),
+            JobKind::ListAllTests(list_tests_job) => list_tests_job.fmt(f),
             JobKind::RunTests(run_tests_job) => run_tests_job.fmt(f),
         }
     }
@@ -218,7 +218,7 @@ impl JobKind {
             JobKind::FileSync(file_sync_job) => file_sync_job.execute(),
             JobKind::BuildCrate(build_crate_job) => build_crate_job.execute(parent_job_id),
             JobKind::BuildTests(build_tests_job) => build_tests_job.execute(parent_job_id),
-            JobKind::ListTests(list_tests_job) => list_tests_job.execute(parent_job_id),
+            JobKind::ListAllTests(list_tests_job) => list_tests_job.execute(parent_job_id),
             JobKind::RunTests(run_tests_job) => run_tests_job.execute(parent_job_id),
         }
     }
@@ -305,4 +305,24 @@ fn gather_process_output(
         warn!("{}", msg);
         Err(msg)
     }
+}
+
+/// Gathers the stdout of a duct command. If you want to gather both
+/// the stdout and the stderr, call `stderr_to_stdout` on your command
+/// before calling this function.
+fn gather_process_stdout(
+    cmd: duct::Expression,
+    description: &str,
+    parent_job_id: JobId,
+) -> std::io::Result<String> {
+    let output = cmd.read()?;
+
+    info!(
+        "{} {} succeeded, stdout={} bytes",
+        parent_job_id,
+        description,
+        output.len()
+    );
+
+    Ok(output)
 }
