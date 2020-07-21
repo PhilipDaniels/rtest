@@ -1,7 +1,7 @@
 use crate::{
     configuration::{BuildMode, Configuration},
     jobs::{
-        BuildTestsJob, CompletedJob, CompletionStatus, Job, JobKind, ListAllTestsJob, PendingJob,
+        BuildAllTestsJob, CompletedJob, CompletionStatus, Job, JobKind, ListAllTestsJob, PendingJob,
         RunTestsJob,
     },
     thread_clutch::ThreadClutch, state::State,
@@ -131,7 +131,7 @@ impl JobEngine {
                 match kind {
                     JobKind::ShadowCopy(_) => {}
                     JobKind::FileSync(_) => {}
-                    JobKind::BuildTests(_) => {}
+                    JobKind::BuildAllTests(_) => {}
                     JobKind::BuildCrate(_) => {}
                     JobKind::ListAllTests(kind) => {
                         let tests = kind.parse_tests().unwrap();
@@ -169,7 +169,7 @@ impl JobEngine {
                 if pending_jobs_lock.is_empty() {
                     if self.build_tests_required.is_true() {
                         let job =
-                            BuildTestsJob::new(self.configuration.destination.clone(), build_mode);
+                            BuildAllTestsJob::new(self.configuration.destination.clone(), build_mode);
                         self.add_job_inner(job, pending_jobs_lock);
                     } else if self.list_tests_required.is_true() {
                         let job =
@@ -237,11 +237,11 @@ impl JobEngine {
             }
             (JobKind::FileSync(_), CompletionStatus::Error(_)) => {}
 
-            (JobKind::BuildTests(_), CompletionStatus::Ok) => {
+            (JobKind::BuildAllTests(_), CompletionStatus::Ok) => {
                 self.build_tests_required.set_false();
                 self.list_tests_required.set_true();
             }
-            (JobKind::BuildTests(_), CompletionStatus::Error(_)) => {
+            (JobKind::BuildAllTests(_), CompletionStatus::Error(_)) => {
                 // To prevent recursion, we need to wait till we get another file copy.
                 self.build_tests_required.set_false();
             }
