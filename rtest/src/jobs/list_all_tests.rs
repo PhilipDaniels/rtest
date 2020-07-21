@@ -63,6 +63,8 @@ impl ListAllTestsJob {
     /// can fail. What are all the output variations of cargo?
     pub fn parse_tests(&self) -> Result<Vec<Tests>, ParseError> {
         //info!("PARSING TEST LIST: {}", &self.output);
+        // TODO: We can't do this during the job execution
+        // because of the lifetime in Tests<'a>.
         parse_test_list(&self.output)
     }
 }
