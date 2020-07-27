@@ -1,16 +1,17 @@
 use crate::{
     configuration::BuildMode,
-    jobs::{gather_process_output, CompletionStatus, JobId, JobKind, PendingJob, ProcessOutput},
+    jobs::{gather_process_stdout, CompletionStatus, JobId, JobKind, PendingJob},
     shadow_copy_destination::ShadowCopyDestination,
 };
+use duct::cmd;
 use log::info;
-use std::{fmt::Display, process::Command};
+use std::fmt::Display;
 
 #[derive(Debug, Clone)]
 pub struct RunTestsJob {
     destination: ShadowCopyDestination,
     build_mode: BuildMode,
-    output: Option<ProcessOutput>,
+    output: String,
 }
 
 impl Display for RunTestsJob {
@@ -20,11 +21,11 @@ impl Display for RunTestsJob {
 }
 
 impl RunTestsJob {
-    pub fn new(destination_directory: ShadowCopyDestination, build_mode: BuildMode) -> PendingJob {
+    pub fn new(destination: ShadowCopyDestination, build_mode: BuildMode) -> PendingJob {
         let kind = JobKind::RunTests(RunTestsJob {
-            destination: destination_directory,
+            destination,
             build_mode,
-            output: None,
+            output: Default::default(),
         });
 
         kind.into()
@@ -32,32 +33,24 @@ impl RunTestsJob {
 
     #[must_use = "Don't ignore the completion status, caller needs to store it"]
     pub fn execute(&mut self, parent_job_id: JobId) -> CompletionStatus {
-        let cwd = if self.destination.is_copying() {
-            let dir = self.destination.destination_directory().unwrap();
-            info!(
-                "{} Testing in shadow copy directory {}",
-                parent_job_id,
-                dir.display()
-            );
-            dir
-        } else {
-            let dir = self.destination.source_directory();
-            info!(
-                "{} Testing in the original directory {}",
-                parent_job_id,
-                dir.display()
-            );
-            dir
-        };
+        let cwd = self.destination.cwd();
+        info!("{} Listing Running in {}", parent_job_id, cwd.display());
 
         // cargo test --no-fail-fast -- --show-output --test-threads=1 --color never
-        let mut command = Command::new("cargo");
-        command.arg("test");
-        command.current_dir(cwd);
+        let mut args = Vec::new();
+        args.push("test");
+        args.push("--no-fail-fast");
+        args.push("--");
+        args.push("--show-output");
+        args.push("--test-threads=1");
+        args.push("--color");
+        args.push("never");
 
-        self.output = match gather_process_output(command, "Run tests", parent_job_id) {
-            Ok(output) => Some(output),
-            Err(msg) => return msg.into(),
+        let cmd = cmd("cargo", args).stderr_to_stdout().dir(cwd);
+
+        self.output = match gather_process_stdout(cmd, "Run all tests", parent_job_id) {
+            Ok(output) => output,
+            Err(err) => return err.to_string().into(),
         };
 
         CompletionStatus::Ok

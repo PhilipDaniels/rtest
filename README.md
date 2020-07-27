@@ -44,13 +44,13 @@ A testing GUI for Rust.
   - [ ] Light and dark default themes
 
 - [ ] Shadow copy feature
-  - [ ] Config: specify a temp dir or a known dir (~/.rtest/...)
+  - [X] Config: specify a temp dir or a known dir (~/.rtest/...)
   - [ ] Config: concept of 'destination' which can be on another machine (build server) or local
         Tests are run in the destination dir. Initially, destination can be the same as the source
         and shadow copy can be a no-op
   - [X] Minimal copy on local disk
   - [X] Directory watcher, need to determine changed files
-  - [ ] Should trigger further work (e.g. sync, build, test) by placing items into the execution queue.
+  - [X] Should trigger further work (e.g. sync, build, test) by placing items into the execution queue.
   - [ ] Config: Things to ignore (default to .gitignore)
   - [ ] Config: Things to include especially
   - [ ] Config: Ability to poll every N seconds instead of file watching
@@ -61,8 +61,8 @@ A testing GUI for Rust.
   - [ ] Config: allow specification of features and flags and things?
 
 - [ ] Test execution engine
-  - [ ] We need to discover all the tests
-  - [ ] Run all tests
+  - [X] We need to discover all the tests
+  - [X] Run all tests
   - [ ] Run specific tests
   - [ ] Calculate only the *affected* tests and run them automatically
   - [ ] Capture test output from `println` and `log`
@@ -71,7 +71,7 @@ A testing GUI for Rust.
   - [ ] Ability to extract data and write it to a JSON or CSV file for further reporting.
 
 - [ ] The execution Queue
-  - [ ] Define the types of things that can be put in the queue (sync, build, analyze, run tests)
+  - [X] Define the types of things that can be put in the queue (sync, build, analyze, run tests)
   - [ ] Emission of events so progress can be monitored?
   - [X] Ability to pause and clear the queue
   - [ ] "Start again" feature: recreate a new shadow copy
