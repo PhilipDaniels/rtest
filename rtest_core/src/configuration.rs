@@ -1,6 +1,5 @@
 use crate::{
-    shadow_copy_destination::ShadowCopyDestination, CARGO_PKG_AUTHORS, CARGO_PKG_DESCRIPTION,
-    CARGO_PKG_NAME, CARGO_PKG_VERSION,
+    shadow_copy_destination::ShadowCopyDestination
 };
 use clap::{App, Arg};
 use log::info;
@@ -99,10 +98,10 @@ impl FromStr for CompilationMode {
 }
 
 fn get_cli_arguments() -> CommandLineArguments {
-    let matches = App::new(CARGO_PKG_NAME)
-        .version(CARGO_PKG_VERSION)
-        .author(CARGO_PKG_AUTHORS)
-        .about(CARGO_PKG_DESCRIPTION)
+    let matches = App::new(env!("CARGO_PKG_NAME"))
+        .version(env!("CARGO_PKG_VERSION"))
+        .author(env!("CARGO_PKG_AUTHORS"))
+        .about( env!("CARGO_PKG_DESCRIPTION"))
         .arg(
             Arg::with_name("shadow-copy")
                 .about("Do not shadow copy, use the original source directory for compilations")

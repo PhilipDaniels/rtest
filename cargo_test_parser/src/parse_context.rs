@@ -6,7 +6,7 @@
 pub struct ParseContext<'a> {
     data: &'a str,
     lines: Vec<&'a str>,
-    current_line_number: LineNumber,
+    current_line_number: LineNumber,    // TODO: Go from 1, not 0.
 }
 
 enum LineNumber {

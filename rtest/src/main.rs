@@ -4,32 +4,21 @@ use env_logger::Builder;
 use log::info;
 use std::{io::Write, sync::mpsc::channel};
 
-mod configuration;
-mod engine;
-#[path = "jobs/jobs.rs"]
-mod jobs;
-mod shadow_copy_destination;
-mod source_directory_watcher;
-mod state;
-mod thread_clutch;
 mod ui;
-mod utils;
 
-use engine::JobEngine;
-use jobs::{FileSyncJob, ShadowCopyJob};
+use rtest_core::{
+    configuration,
+    engine::JobEngine,
+    jobs::{FileSyncJob, ShadowCopyJob},
+    source_directory_watcher,
+    state::State,
+};
 use source_directory_watcher::FileSyncEvent;
-use state::State;
 use ui::build_main_window;
-
-pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
-pub const CARGO_PKG_AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
-pub const CARGO_PKG_DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");
-pub const CARGO_PKG_REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
-pub const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() {
     configure_logging();
-    info!("Starting {}", CARGO_PKG_NAME);
+    info!("Starting {}", env!("CARGO_PKG_NAME"));
     let config = configuration::new();
     info!("{:?}", config);
 
@@ -62,7 +51,7 @@ fn main() {
     // This call blocks this thread.
     create_main_window();
 
-    info!("Stopping {}", CARGO_PKG_NAME);
+    info!("Stopping {}", env!("CARGO_PKG_NAME"));
 }
 
 /// Just configures logging in such a way that we can see everything.
@@ -103,7 +92,7 @@ fn create_main_window() {
     info!("Creating main window");
 
     let title_string = LocalizedString::new("rtest-main-window-title")
-        .with_placeholder(format!("{} - TDD for Rust", CARGO_PKG_NAME));
+        .with_placeholder(format!("{} - TDD for Rust", env!("CARGO_PKG_NAME")));
 
     let main_window_desc = WindowDesc::new(build_main_window)
         .window_size((512.0, 512.0))

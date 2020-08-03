@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "rtest",
+    "rtest_core",
     "cargo_test_parser",
     "example_lib_tests",
     "example_bin_tests"
