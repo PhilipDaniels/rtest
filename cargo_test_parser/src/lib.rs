@@ -50,12 +50,16 @@ pub fn parse_test_list(data: &str) -> Result<Vec<Tests>, ParseError> {
                 if line.is_empty() {
                     continue;
                 }
+                // This indicates we improperly ran over into another section.
+                if line.starts_with(RUNNING_PREFIX) || line.starts_with(DOC_TEST_PREFIX) {
+                    return Err(ParseError::section_overrun(&ctx));
+                }
 
                 if let Some((num_tests, _num_benches)) = parse_test_summary_count(line) {
                     // Check that we extracted the same number of items as
                     // the summary line claims there are.
                     if crate_tests.tests.len() != num_tests {
-                        return Err(ParseError::unit_test_miscount(&ctx));
+                        return Err(ParseError::unit_test_miscount(&ctx, crate_tests.tests.len()));
                     }
                     // TODO: Check benchmarks here.
 
@@ -102,11 +106,16 @@ pub fn parse_test_list(data: &str) -> Result<Vec<Tests>, ParseError> {
                     continue;
                 }
 
+                // This indicates we improperly ran over into another section.
+                if line.starts_with(RUNNING_PREFIX) || line.starts_with(DOC_TEST_PREFIX) {
+                    return Err(ParseError::section_overrun(&ctx));
+                }
+
                 if let Some((num_tests, _num_benches)) = parse_test_summary_count(line) {
                     // Check that we extracted the same number of items as
                     // the summary line claims there are.
                     if crate_tests.doc_tests.len() != num_tests {
-                        return Err(ParseError::unit_test_miscount(&ctx));
+                        return Err(ParseError::unit_test_miscount(&ctx, crate_tests.doc_tests.len()));
                     }
                     // TODO: Check benchmarks here.
 
@@ -275,7 +284,7 @@ d::e::f: bench
 
 #[cfg(test)]
 mod parse_test_list_doc_tests {
-    use crate::parse_test_list;
+    use crate::{parse_error::ParseErrorKind, parse_test_list};
 
     #[test]
     fn parse_doc_tests_with_no_prior_unit_tests() {
@@ -302,8 +311,50 @@ src/foo.rs - one_doc_test (line 999): test
         tests::ignored_test: test
         tests::passing_logging_test: test
         tests::passing_printing_test: test
+        tests::passing_printing_test2: test
         
-        6 tests, 0 benchmarks
+7 tests, 0 benchmarks
+             Running target/debug/deps/example_lib_tests-35c4554393436661
+        tests::failing_logging_test: test
+        tests::failing_printing_test: test
+        tests::failing_test1: test
+        tests::ignored_test: test
+        tests::passing_logging_test: test
+        tests::passing_printing_test: test
+6 tests, 0 benchmarks
+
+        Doc-tests example_lib_tests
+        src/lib.rs - failing_doctest (line 21): test
+        src/lib.rs - failing_printing_doctest (line 29): test
+        src/lib.rs - passing_doctest (line 3): test
+        src/lib.rs - passing_printing_doctest (line 11): test
+        
+4 tests, 0 benchmarks
+";
+
+        let tests = parse_test_list(input).unwrap();
+        assert_eq!(tests.len(), 2);
+
+        assert_eq!(tests[0].crate_name.full_name, "target/debug/deps/example_bin_tests-b371342d81493fca");
+        assert_eq!(tests[0].tests.len(), 7);
+        assert_eq!(tests[0].doc_tests.len(), 0);
+
+        assert_eq!(tests[1].crate_name.full_name, "target/debug/deps/example_lib_tests-35c4554393436661");
+        assert_eq!(tests[1].tests.len(), 6);
+        assert_eq!(tests[1].doc_tests.len(), 4);
+    }
+
+    #[test]
+    fn parse_unexpected_section() {
+        let input = "     Running target/debug/deps/example_bin_tests-b371342d81493fca
+        tests::failing_logging_test: test
+        tests::failing_printing_test: test
+        tests::failing_test1: test
+        tests::ignored_test: test
+        tests::passing_logging_test: test
+        tests::passing_printing_test: test
+        
+6 tests, 0 benchmarks
              Running target/debug/deps/example_lib_tests-35c4554393436661
         tests::failing_logging_test: test
         tests::failing_printing_test: test
@@ -318,11 +369,12 @@ src/foo.rs - one_doc_test (line 999): test
         src/lib.rs - passing_doctest (line 3): test
         src/lib.rs - passing_printing_doctest (line 11): test
         
-        4 tests, 0 benchmarks
+4 tests, 0 benchmarks
 ";
-    }
 
-    // TODO: Seem to be missing some tests here.
+        let tests = parse_test_list(input).unwrap_err();
+        assert_eq!(tests.kind, ParseErrorKind::SectionOverrun, "Due to missing summary count line half-way down the input");
+    }
 }
 
 #[cfg(test)]

@@ -10,13 +10,15 @@ pub enum ParseErrorKind {
     BenchmarkMiscount,
     DocTestMiscount,
     MalformedDocTestLine,
+    SectionOverrun,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseError {
     line_number: usize,
     line: String,
-    pub(crate) kind: ParseErrorKind
+    pub(crate) kind: ParseErrorKind,
+    message: String,
 }
 
 impl ParseError {
@@ -27,6 +29,16 @@ impl ParseError {
             line_number: ctx.current_line_number().unwrap_or_default(),
             line: ctx.current_line().unwrap_or_default().into(),
             kind,
+            message: String::default(),
+        }
+    }
+
+    pub fn with_message(kind: ParseErrorKind, ctx: &ParseContext, message: String) -> Self {
+        Self {
+            line_number: ctx.current_line_number().unwrap_or_default(),
+            line: ctx.current_line().unwrap_or_default().into(),
+            kind,
+            message,
         }
     }
 
@@ -56,8 +68,8 @@ impl ParseError {
 
     /// Construct a `ParseError` of kind `ParseErrorKind::UnitTestMiscount`
     /// based on the current `ParseContext`.
-    pub fn unit_test_miscount(ctx: &ParseContext) -> Self {
-        Self::with_kind(ParseErrorKind::UnitTestMiscount, ctx)
+    pub fn unit_test_miscount(ctx: &ParseContext, actual_test_count: usize) -> Self {
+        Self::with_message(ParseErrorKind::UnitTestMiscount, ctx, format!("Actual found test count: {}", actual_test_count))
     }
 
     /// Construct a `ParseError` of kind `ParseErrorKind::BenchmarkMiscount`
@@ -76,5 +88,11 @@ impl ParseError {
     /// based on the current `ParseContext`.
     pub fn malformed_doc_test_line(ctx: &ParseContext) -> Self {
         Self::with_kind(ParseErrorKind::MalformedDocTestLine, ctx)
+    }
+
+    /// Construct a `ParseError` of kind `ParseErrorKind::SectionOverrun`
+    /// based on the current `ParseContext`.
+    pub fn section_overrun(ctx: &ParseContext) -> Self {
+        Self::with_kind(ParseErrorKind::SectionOverrun, ctx)
     }
 }
