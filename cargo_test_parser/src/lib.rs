@@ -170,12 +170,12 @@ fn parse_test_summary_count(line: &str) -> Option<(usize, usize)> {
 
     match (p1, p2) {
         (Some(s1), Some(s2)) => {
-            if s1.ends_with(" tests") {
+            if s1.ends_with(" tests") || s1.ends_with("1 test") {
                 // If we fail to parse an int from the beginning of the string,
                 // just assume this is a non-compliant line and return None.
                 let num_tests = parse_leading_usize(s1)?;
 
-                if s2.ends_with(" benchmarks") {
+                if s2.ends_with(" benchmarks") || s2.ends_with("1 benchmark") {
                     let num_benchmarks = parse_leading_usize(s2)?;
                     return Some((num_tests, num_benchmarks));
                 }
@@ -275,7 +275,7 @@ d::e::f: bench
 
 #[cfg(test)]
 mod parse_test_list_doc_tests {
-    use crate::{parse_error::ParseErrorKind, parse_test_list};
+    use crate::parse_test_list;
 
     #[test]
     fn parse_doc_tests_with_no_prior_unit_tests() {
@@ -321,6 +321,8 @@ src/foo.rs - one_doc_test (line 999): test
         4 tests, 0 benchmarks
 ";
     }
+
+    // TODO: Seem to be missing some tests here.
 }
 
 #[cfg(test)]
@@ -341,9 +343,22 @@ mod parse_test_summary_count_tests {
 
     #[test]
     fn parse_for_good_data() {
-        let (a, b) = parse_test_summary_count("1 tests, 2 benchmarks").unwrap();
+        let (a, b) = parse_test_summary_count("0 tests, 0 benchmarks").unwrap();
+        assert_eq!(a, 0);
+        assert_eq!(b, 0);
+
+        let (a, b) = parse_test_summary_count("2 tests, 3 benchmarks").unwrap();
+        assert_eq!(a, 2);
+        assert_eq!(b, 3);
+
+        // Note grammar change.
+        let (a, b) = parse_test_summary_count("1 test, 3 benchmarks").unwrap();
         assert_eq!(a, 1);
-        assert_eq!(b, 2);
+        assert_eq!(b, 3);
+
+        let (a, b) = parse_test_summary_count("2 tests, 1 benchmark").unwrap();
+        assert_eq!(a, 2);
+        assert_eq!(b, 1);
     }
 }
 
