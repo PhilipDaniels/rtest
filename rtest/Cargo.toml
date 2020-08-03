@@ -7,7 +7,6 @@ edition = "2018"
 [dependencies]
 cargo_test_parser = { path = "../cargo_test_parser" }
 chrono = { version = "0.4", features = ["serde"] }
-druid = "0.6.0"
 env_logger = "0.7"
 log = "0.4"
 rtest_core = { path = "../rtest_core" }

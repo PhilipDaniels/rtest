@@ -1,10 +1,7 @@
 use chrono::Utc;
-use druid::{AppLauncher, LocalizedString, WindowDesc};
 use env_logger::Builder;
 use log::info;
 use std::{io::Write, sync::mpsc::channel};
-
-mod ui;
 
 use rtest_core::{
     configuration,
@@ -14,7 +11,6 @@ use rtest_core::{
     state::State,
 };
 use source_directory_watcher::FileSyncEvent;
-use ui::build_main_window;
 
 fn main() {
     configure_logging();
@@ -47,9 +43,6 @@ fn main() {
             }
         });
     }
-
-    // This call blocks this thread.
-    create_main_window();
 
     info!("Stopping {}", env!("CARGO_PKG_NAME"));
 }
@@ -86,22 +79,4 @@ fn configure_logging() {
     });
 
     builder.init();
-}
-
-fn create_main_window() {
-    info!("Creating main window");
-
-    let title_string = LocalizedString::new("rtest-main-window-title")
-        .with_placeholder(format!("{} - TDD for Rust", env!("CARGO_PKG_NAME")));
-
-    let main_window_desc = WindowDesc::new(build_main_window)
-        .window_size((512.0, 512.0))
-        .resizable(true)
-        .title(title_string);
-
-    let state = ();
-
-    AppLauncher::with_window(main_window_desc)
-        .launch(state)
-        .expect("Cannot create main window");
 }
