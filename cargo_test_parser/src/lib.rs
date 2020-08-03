@@ -4,10 +4,10 @@ mod parse_context;
 mod parse_error;
 mod utils;
 
-pub use parse_error::ParseError;
 pub use crate_name::CrateName;
 use doc_test::DocTest;
 use parse_context::ParseContext;
+pub use parse_error::ParseError;
 use utils::parse_leading_usize;
 
 /// Parses the output of `cargo test -- --list` and returns the result.
@@ -59,7 +59,10 @@ pub fn parse_test_list(data: &str) -> Result<Vec<Tests>, ParseError> {
                     // Check that we extracted the same number of items as
                     // the summary line claims there are.
                     if crate_tests.tests.len() != num_tests {
-                        return Err(ParseError::unit_test_miscount(&ctx, crate_tests.tests.len()));
+                        return Err(ParseError::unit_test_miscount(
+                            &ctx,
+                            crate_tests.tests.len(),
+                        ));
                     }
                     // TODO: Check benchmarks here.
 
@@ -115,7 +118,10 @@ pub fn parse_test_list(data: &str) -> Result<Vec<Tests>, ParseError> {
                     // Check that we extracted the same number of items as
                     // the summary line claims there are.
                     if crate_tests.doc_tests.len() != num_tests {
-                        return Err(ParseError::unit_test_miscount(&ctx, crate_tests.doc_tests.len()));
+                        return Err(ParseError::unit_test_miscount(
+                            &ctx,
+                            crate_tests.doc_tests.len(),
+                        ));
                     }
                     // TODO: Check benchmarks here.
 
@@ -195,13 +201,6 @@ fn parse_test_summary_count(line: &str) -> Option<(usize, usize)> {
         _ => None,
     }
 }
-
-#[cfg(test)]
-static ONE_LIB_INPUT: &str = include_str!(r"inputs/one_library.txt");
-#[cfg(test)]
-static ONE_BINARY_INPUT: &str = include_str!(r"inputs/one_binary.txt");
-#[cfg(test)]
-static MULTIPLE_CRATES_INPUT: &str = include_str!(r"inputs/multiple_crates.txt");
 
 /// A bunch of tests that just check that our extract-next collection sequence
 /// for `CrateTestList` works. Does not check that we can extract the names
@@ -335,11 +334,17 @@ src/foo.rs - one_doc_test (line 999): test
         let tests = parse_test_list(input).unwrap();
         assert_eq!(tests.len(), 2);
 
-        assert_eq!(tests[0].crate_name.full_name, "target/debug/deps/example_bin_tests-b371342d81493fca");
+        assert_eq!(
+            tests[0].crate_name.full_name,
+            "target/debug/deps/example_bin_tests-b371342d81493fca"
+        );
         assert_eq!(tests[0].tests.len(), 7);
         assert_eq!(tests[0].doc_tests.len(), 0);
 
-        assert_eq!(tests[1].crate_name.full_name, "target/debug/deps/example_lib_tests-35c4554393436661");
+        assert_eq!(
+            tests[1].crate_name.full_name,
+            "target/debug/deps/example_lib_tests-35c4554393436661"
+        );
         assert_eq!(tests[1].tests.len(), 6);
         assert_eq!(tests[1].doc_tests.len(), 4);
     }
@@ -373,7 +378,11 @@ src/foo.rs - one_doc_test (line 999): test
 ";
 
         let tests = parse_test_list(input).unwrap_err();
-        assert_eq!(tests.kind, ParseErrorKind::SectionOverrun, "Due to missing summary count line half-way down the input");
+        assert_eq!(
+            tests.kind,
+            ParseErrorKind::SectionOverrun,
+            "Due to missing summary count line half-way down the input"
+        );
     }
 }
 
@@ -435,5 +444,55 @@ mod parse_unit_test_tests {
     fn parse_for_good_data() {
         assert_eq!(parse_unit_test("a: test"), Some("a"));
         assert_eq!(parse_unit_test(" a::b::c: test "), Some("a::b::c"));
+    }
+}
+
+/// This module we mainly care about the fact that we get an `Ok` back and not an `Err`,
+/// so we are not checking everything exhaustively.
+#[cfg(test)]
+mod genuine_input_tests {
+    use crate::parse_test_list;
+
+    static ONE_LIB_INPUT: &str = include_str!(r"inputs/one_library.txt");
+    static ONE_BINARY_INPUT: &str = include_str!(r"inputs/one_binary.txt");
+    static MULTIPLE_CRATES_INPUT: &str = include_str!(r"inputs/multiple_crates.txt");
+
+    #[test]
+    fn genuine_input_can_be_parsed_successfully_for_one_lib() {
+        let tests = parse_test_list(ONE_LIB_INPUT).unwrap();
+        assert_eq!(tests.len(), 1);
+        assert_eq!(
+            tests[0].crate_name.full_name,
+            "/home/phil/repos/rtest/target/debug/deps/example_lib_tests-9bdf7ee7378a8684"
+        );
+        assert_eq!(tests[0].tests.len(), 6);
+        assert_eq!(tests[0].doc_tests.len(), 4);
+        assert_eq!(tests[0].doc_tests[0].name, "failing_doctest");
+    }
+
+    #[test]
+    fn genuine_input_can_be_parsed_successfully_for_one_binary() {
+        let tests = parse_test_list(ONE_BINARY_INPUT).unwrap();
+        assert_eq!(tests.len(), 1);
+        assert_eq!(
+            tests[0].crate_name.full_name,
+            "/home/phil/repos/rtest/target/debug/deps/example_bin_tests-9fa0296c6a0c95ca"
+        );
+        assert_eq!(tests[0].tests.len(), 6);
+        assert_eq!(tests[0].doc_tests.len(), 0);
+        assert_eq!(tests[0].tests[0], "tests::failing_logging_test");
+    }
+
+    #[test]
+    fn genuine_input_can_be_parsed_successfully_for_multiple_crates() {
+        let tests = parse_test_list(MULTIPLE_CRATES_INPUT).unwrap();
+        assert_eq!(tests.len(), 4);
+        assert_eq!(
+            tests[0].crate_name.full_name,
+            "target/debug/deps/cargo_test_parser-0490fca25dc32581"
+        );
+        assert_eq!(tests[0].tests.len(), 1);
+        assert_eq!(tests[0].doc_tests.len(), 0);
+        assert_eq!(tests[0].tests[0], "tests::it_works");
     }
 }
