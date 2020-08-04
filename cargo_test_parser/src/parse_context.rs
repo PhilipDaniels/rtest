@@ -6,7 +6,7 @@
 pub struct ParseContext<'a> {
     data: &'a str,
     lines: Vec<&'a str>,
-    current_line_number: LineNumber,    // TODO: Go from 1, not 0.
+    current_line_number: LineNumber,
 }
 
 enum LineNumber {
@@ -38,7 +38,7 @@ impl<'a> ParseContext<'a> {
     pub fn current_line(&self) -> Option<&'a str> {
         match self.current_line_number {
             LineNumber::NotStarted => None,
-            LineNumber::InProgress(idx) => Some(self.lines[idx]),
+            LineNumber::InProgress(idx) => Some(self.lines[idx - 1]),
             LineNumber::Finished => None,
         }
     }
@@ -48,7 +48,7 @@ impl<'a> ParseContext<'a> {
     pub fn prev(&mut self) {
         self.current_line_number = match self.current_line_number {
             LineNumber::NotStarted => LineNumber::NotStarted,
-            LineNumber::InProgress(idx) if idx == 0 => LineNumber::NotStarted,
+            LineNumber::InProgress(idx) if idx == 1 => LineNumber::NotStarted,
             LineNumber::InProgress(idx) => LineNumber::InProgress(idx - 1),
             LineNumber::Finished => LineNumber::Finished,
         };
@@ -62,8 +62,8 @@ impl<'a> ParseContext<'a> {
 
         match self.current_line_number {
             LineNumber::NotStarted => Some(self.lines[0]),
-            LineNumber::InProgress(idx) if idx == self.lines.len() - 1 => None,
-            LineNumber::InProgress(idx) => Some(self.lines[idx + 1]),
+            LineNumber::InProgress(idx) if idx == self.lines.len() => None,
+            LineNumber::InProgress(idx) => Some(self.lines[idx]),
             LineNumber::Finished => None,
         }
     }
@@ -80,16 +80,16 @@ impl<'a> Iterator for ParseContext<'a> {
 
         match self.current_line_number {
             LineNumber::NotStarted => {
-                self.current_line_number = LineNumber::InProgress(0);
+                self.current_line_number = LineNumber::InProgress(1);
                 Some(&self.lines[0])
             }
-            LineNumber::InProgress(idx) if idx == self.lines.len() - 1 => {
+            LineNumber::InProgress(idx) if idx == self.lines.len() => {
                 self.current_line_number = LineNumber::Finished;
                 None
             }
             LineNumber::InProgress(idx) => {
                 self.current_line_number = LineNumber::InProgress(idx + 1);
-                Some(&self.lines[idx + 1])
+                Some(&self.lines[idx])
             }
             LineNumber::Finished => None,
         }
@@ -124,12 +124,16 @@ mod parse_context_tests {
         assert_eq!(pc.current_line(), None);
 
         let line = pc.next();
-        assert_eq!(pc.current_line_number(), Some(0));
+        assert_eq!(
+            pc.current_line_number(),
+            Some(1),
+            "Lines are counted from 1..len"
+        );
         assert_eq!(pc.current_line(), Some("abc"));
         assert_eq!(line, Some("abc"));
 
         let line = pc.next();
-        assert_eq!(pc.current_line_number(), Some(1));
+        assert_eq!(pc.current_line_number(), Some(2));
         assert_eq!(pc.current_line(), Some("def"));
         assert_eq!(line, Some("def"));
 
@@ -168,13 +172,13 @@ mod parse_context_tests {
         assert_eq!(pc.current_line(), None);
 
         let line = pc.next();
-        assert_eq!(pc.current_line_number(), Some(0));
+        assert_eq!(pc.current_line_number(), Some(1));
         assert_eq!(pc.current_line(), Some("abc"));
         assert_eq!(line, Some("abc"));
 
         let peeked_line = pc.peek();
         assert_eq!(peeked_line, Some("def"));
-        assert_eq!(pc.current_line_number(), Some(0));
+        assert_eq!(pc.current_line_number(), Some(1));
         assert_eq!(pc.current_line(), Some("abc"));
     }
 
@@ -186,12 +190,12 @@ mod parse_context_tests {
 
         // We should be on the last line now.
         assert_eq!(line, Some("def"));
-        assert_eq!(pc.current_line_number(), Some(1));
+        assert_eq!(pc.current_line_number(), Some(2));
         assert_eq!(pc.current_line(), Some("def"));
 
         // Then the first line.
         pc.prev();
-        assert_eq!(pc.current_line_number(), Some(0));
+        assert_eq!(pc.current_line_number(), Some(1));
         assert_eq!(pc.current_line(), Some("abc"));
 
         // Then the beginning again.
