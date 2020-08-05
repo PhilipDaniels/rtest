@@ -1,9 +1,6 @@
 use chrono::Utc;
 use log::info;
 use std::{io::Write, sync::mpsc::channel};
-use gtk::*;
-use gtk::prelude::*;
-use gio::prelude::*;
 
 use rtest_core::{
     configuration,
@@ -13,6 +10,8 @@ use rtest_core::{
     state::State,
 };
 use source_directory_watcher::FileSyncEvent;
+
+mod ui;
 
 fn main() {
     configure_logging();
@@ -46,31 +45,9 @@ fn main() {
         });
     }
 
+    ui::show_main_window();
+
     info!("Stopping {}", env!("CARGO_PKG_NAME"));
-
-    let application = gtk::Application::new(Some("com.example.example"), Default::default())
-        .expect("Initialization failed...");
-    
-    application.connect_activate(|app| {
-        // Load the compiled resource bundle
-        let resources_bytes = include_bytes!("../resources/resources.gresource");
-        let resource_data = glib::Bytes::from(&resources_bytes[..]);
-        let res = gio::Resource::from_data(&resource_data).unwrap();
-        gio::resources_register(&res);
-
-        // Load the window UI
-        let builder = Builder::from_resource("/org/example/Example/main_window.glade");
-
-        // Get a reference to the window
-        let window: ApplicationWindow = builder.get_object("main_window").expect("Couldn't get window");
-        window.set_application(Some(app));
-
-        // Show the UI
-        window.show_all();
-    });
-
-    let args = vec![];
-    application.run(&args);
 }
 
 /// Just configures logging in such a way that we can see everything.
