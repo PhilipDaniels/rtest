@@ -10,3 +10,15 @@ chrono = { version = "0.4", features = ["serde"] }
 env_logger = "0.7"
 log = "0.4"
 rtest_core = { path = "../rtest_core" }
+
+[dependencies.gtk]
+version = "0.9.0"
+features = ["v3_16"]
+
+[dependencies.gio]
+version = ""
+features = ["v2_44"]
+
+[dependencies.glib]
+version = ""
+features = ["v2_44"]
