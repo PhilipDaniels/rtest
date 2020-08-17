@@ -33,10 +33,21 @@ pub fn show_main_window() {
 }
 
 fn connect_callbacks(builder: &Builder) {
-    let button: Button = builder.get_object("btnMain").expect("Couldn't get btnMain");
-    button.connect_clicked(on_btn_main_clicked);
+    let menu = builder
+        .get_object::<MenuItem>("mnuRedo")
+        .expect("Couldn't get mnuRedo");
+    menu.connect_activate(on_mnu_redo_activated);
+
+    let menu = builder
+        .get_object::<MenuItem>("mnuRefresh")
+        .expect("Couldn't get mnuRefresh");
+    menu.connect_activate(on_mnu_refresh_activated);
 }
 
-fn on_btn_main_clicked(_btn: &Button) {
-    info!("on_btn_main_clicked free function")
+fn on_mnu_redo_activated(_menu_item: &MenuItem) {
+    info!("on_mnu_redo_activated free function")
+}
+
+fn on_mnu_refresh_activated(_menu_item: &MenuItem) {
+    info!("on_mnu_refresh_activated free function")
 }
