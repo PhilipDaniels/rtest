@@ -1,6 +1,6 @@
 use log::{error, info};
-use remove_dir_all::remove_dir_all;
-use std::path::{Path, PathBuf};
+use std::{sync::Arc, path::{Path, PathBuf}};
+use tempfile::TempDir;
 
 /// Represents the destination directory for the shadow-copy operation.
 /// If `UseSourceDirectory`, then no shadow copying is performed and
@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 pub enum DestinationDirectory {
     SameAsSource,
     NamedDirectory(PathBuf),
+    TempDirectory(Arc<TempDir>),
 }
 
 impl DestinationDirectory {
@@ -19,6 +20,24 @@ impl DestinationDirectory {
         match self {
             DestinationDirectory::SameAsSource => false,
             DestinationDirectory::NamedDirectory(_) => true,
+            DestinationDirectory::TempDirectory(_) => true,
+        }
+    }
+}
+
+impl Drop for DestinationDirectory {
+    fn drop(&mut self) {
+        match self {
+            DestinationDirectory::SameAsSource => {}
+            DestinationDirectory::NamedDirectory(dir) => {
+                match std::fs::remove_dir_all(&dir) {
+                    Ok(_) => { info!("Removed named directory {:?}", dir); }
+                    Err(_) => { error!("Error removing named directory {:?}", dir); }
+                }
+            }
+            DestinationDirectory::TempDirectory(temp_dir) => {
+                info!("Dropping temp directory {:?}", temp_dir.path());
+            }
         }
     }
 }
@@ -32,14 +51,26 @@ pub struct ShadowCopyDestination {
 }
 
 impl ShadowCopyDestination {
-    pub fn new(source_directory: PathBuf, destination: Option<PathBuf>) -> Self
-    {
+    pub fn without_copying(source_directory: PathBuf) -> Self {
         Self {
             source_directory,
-            destination: match destination {
-                Some(dir) => DestinationDirectory::NamedDirectory(dir.into()),
-                None => DestinationDirectory::SameAsSource,
-            }
+            destination: DestinationDirectory::SameAsSource,
+        }
+    }
+
+    pub fn with_temp_destination(source_directory: PathBuf) -> Self {
+        let temp_dir = tempfile::tempdir().expect("Cannot create tempdir");
+
+        Self {
+            source_directory,
+            destination: DestinationDirectory::TempDirectory(Arc::new(temp_dir)),
+        }
+    }
+
+    pub fn with_named_directory(source_directory: PathBuf, destination: PathBuf) -> Self {
+        Self {
+            source_directory,
+            destination: DestinationDirectory::NamedDirectory(destination),
         }
     }
 
@@ -57,6 +88,7 @@ impl ShadowCopyDestination {
         match &self.destination {
             DestinationDirectory::SameAsSource => None,
             DestinationDirectory::NamedDirectory(dir) => Some(dir),
+            DestinationDirectory::TempDirectory(tempdir) => Some(tempdir.path()),
         }
     }
 
@@ -110,7 +142,7 @@ impl ShadowCopyDestination {
         let dest_path = self.get_path_in_destination(source_path);
 
         if Path::is_dir(&dest_path) {
-            match remove_dir_all(&dest_path) {
+            match std::fs::remove_dir_all(&dest_path) {
                 Ok(_) => {
                     info!("Removed destination directory {}", dest_path.display());
                     return true;

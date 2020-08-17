@@ -159,7 +159,7 @@ impl JobEngine {
 
                 info!("{}", msg);
 
-                let build_mode = match self.configuration.build_mode {
+                let build_mode = match self.configuration.build_mode() {
                     crate::configuration::CompilationMode::None => BuildMode::Debug,
                     crate::configuration::CompilationMode::Debug => BuildMode::Debug,
                     crate::configuration::CompilationMode::Release => BuildMode::Release,

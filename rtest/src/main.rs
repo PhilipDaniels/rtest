@@ -30,7 +30,7 @@ fn main() {
         // Then watch for incremental file changes. Use another thread to
         // add jobs to the engine.
         let (sender, receiver) = channel::<FileSyncEvent>();
-        source_directory_watcher::start_watching(&config.source_directory, sender);
+        source_directory_watcher::start_watching(&config.source_directory(), sender);
 
         std::thread::spawn({
             let engine = engine.clone();

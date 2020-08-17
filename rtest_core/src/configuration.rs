@@ -1,9 +1,12 @@
-use crate::{
-    shadow_copy_destination::ShadowCopyDestination
-};
+use crate::shadow_copy_destination::ShadowCopyDestination;
 use clap::{App, Arg};
 use log::info;
-use std::{ops::Deref, path::PathBuf, str::FromStr, sync::Arc};
+use std::{
+    ops::Deref,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+};
 
 /// Represents the global configuration of `rtest` during one run.
 #[derive(Debug, Clone)]
@@ -11,12 +14,10 @@ pub struct Configuration {
     inner: Arc<InnerConfiguration>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct InnerConfiguration {
-    pub source_directory: PathBuf,
+    args: CommandLineArguments,
     pub destination: ShadowCopyDestination,
-    pub build_mode: CompilationMode,
-    pub test_mode: CompilationMode,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -32,11 +33,11 @@ pub enum CompilationMode {
 }
 
 /// The `BuildMode` is used to parameterise invocations
-/// of cargo subprocesses - do we add "--release"?.
+/// of cargo subprocesses - i.e. do we add "--release"?.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BuildMode {
     Debug,
-    Release
+    Release,
 }
 
 impl Deref for Configuration {
@@ -50,31 +51,33 @@ pub fn new() -> Configuration {
     let args = get_cli_arguments();
     info!("CLI {:?}", args);
 
-    let destination = if args.do_shadow_copy {
-        if args.destination.is_none() {
-            let temp_dir = tempfile::tempdir().expect("Cannot create tempdir");
-            ShadowCopyDestination::new(
-                args.source.to_path_buf(),
-                Some(temp_dir.path().to_path_buf()),
-            )
-        } else {
-            ShadowCopyDestination::new(args.source.to_path_buf(), Some(args.destination.unwrap()))
-        }
-    } else {
-        ShadowCopyDestination::new(args.source.to_path_buf(), None)
-    };
-
+    let destination = args.make_shadow_copy_destination();
     Configuration {
-        inner: Arc::new(InnerConfiguration {
-            source_directory: args.source,
-            destination,
-            build_mode: args.build_mode,
-            test_mode: args.test_mode,
-        }),
+        inner: Arc::new(InnerConfiguration { args, destination }),
     }
 }
 
-#[derive(Debug)]
+impl InnerConfiguration {
+    pub fn build_mode(&self) -> CompilationMode {
+        self.args.build_mode
+    }
+
+    pub fn test_mode(&self) -> CompilationMode {
+        self.args.test_mode
+    }
+
+    pub fn source_directory(&self) -> &Path {
+        &self.args.source
+    }
+
+    /// Resets the destination directory. See `drop` implementatation of
+    /// `DestinationDirectory` for details.
+    pub fn reset_destination(&mut self) {
+        self.destination = self.args.make_shadow_copy_destination();
+    }
+}
+
+#[derive(Debug, Clone)]
 struct CommandLineArguments {
     do_shadow_copy: bool,
     source: PathBuf,
@@ -101,7 +104,7 @@ fn get_cli_arguments() -> CommandLineArguments {
     let matches = App::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .author(env!("CARGO_PKG_AUTHORS"))
-        .about( env!("CARGO_PKG_DESCRIPTION"))
+        .about(env!("CARGO_PKG_DESCRIPTION"))
         .arg(
             Arg::with_name("shadow-copy")
                 .about("Do not shadow copy, use the original source directory for compilations")
@@ -146,5 +149,22 @@ fn get_cli_arguments() -> CommandLineArguments {
         destination,
         build_mode,
         test_mode,
+    }
+}
+
+impl CommandLineArguments {
+    pub fn make_shadow_copy_destination(&self) -> ShadowCopyDestination {
+        if self.do_shadow_copy {
+            if self.destination.is_none() {
+                ShadowCopyDestination::with_temp_destination(self.source.to_path_buf())
+            } else {
+                ShadowCopyDestination::with_named_directory(
+                    self.source.to_path_buf(),
+                    self.destination.clone().unwrap(),
+                )
+            }
+        } else {
+            ShadowCopyDestination::without_copying(self.source.to_path_buf())
+        }
     }
 }
