@@ -37,6 +37,7 @@ impl Drop for DestinationDirectory {
             }
             DestinationDirectory::TempDirectory(temp_dir) => {
                 info!("Dropping temp directory {:?}", temp_dir.path());
+                //drop(temp_dir);
             }
         }
     }

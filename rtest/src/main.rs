@@ -16,36 +16,38 @@ mod ui;
 fn main() {
     configure_logging();
     info!("Starting {}", env!("CARGO_PKG_NAME"));
+
     let config = configuration::new();
     info!("{:?}", config);
 
-    let state = State::new();
-    let engine = JobEngine::new(config.clone(), state.clone());
+    let state = State::new(config);
 
-    // If a shadow copy operation is required, kick one off.
-    if config.destination.is_copying() {
-        let job = ShadowCopyJob::new(config.destination.clone());
-        engine.add_job(job);
+    // let engine = JobEngine::new(config.clone(), state.clone());
 
-        // Then watch for incremental file changes. Use another thread to
-        // add jobs to the engine.
-        let (sender, receiver) = channel::<FileSyncEvent>();
-        source_directory_watcher::start_watching(&config.source_directory(), sender);
+    // // If a shadow copy operation is required, kick one off.
+    // if config.destination.is_copying() {
+    //     let job = ShadowCopyJob::new(config.destination.clone());
+    //     engine.add_job(job);
 
-        std::thread::spawn({
-            let engine = engine.clone();
-            let dest = config.destination.clone();
+    //     // Then watch for incremental file changes. Use another thread to
+    //     // add jobs to the engine.
+    //     let (sender, receiver) = channel::<FileSyncEvent>();
+    //     source_directory_watcher::start_watching(&config.source_directory(), sender);
 
-            move || {
-                for event in receiver {
-                    let job = FileSyncJob::new(dest.clone(), event);
-                    engine.add_job(job);
-                }
-            }
-        });
-    }
+    //     std::thread::spawn({
+    //         let engine = engine.clone();
+    //         let dest = config.destination.clone();
 
-    ui::show_main_window();
+    //         move || {
+    //             for event in receiver {
+    //                 let job = FileSyncJob::new(dest.clone(), event);
+    //                 engine.add_job(job);
+    //             }
+    //         }
+    //     });
+    // }
+
+    ui::show_main_window(state.clone());
 
     info!("Stopping {}", env!("CARGO_PKG_NAME"));
 }

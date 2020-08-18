@@ -5,6 +5,7 @@ use std::{
     hash::Hash,
     sync::{Arc, Mutex},
 };
+use crate::configuration::Configuration;
 
 /// Represents the program state (excluding the engine).
 /// Basically this is the list of known tests and their state.
@@ -14,6 +15,7 @@ pub struct State {
 }
 
 pub struct InnerState {
+    configuration: Configuration,
     tests: Vec<CrateTests>,
 }
 
@@ -59,8 +61,8 @@ pub enum TestState {
 }
 
 impl InnerState {
-    fn new() -> Self {
-        Self { tests: Vec::new() }
+    fn new(configuration: Configuration) -> Self {
+        Self { configuration, tests: Vec::new() }
     }
 
     pub fn update_test_list(&mut self, test_list: &[Tests]) {
@@ -115,9 +117,9 @@ impl InnerState {
 }
 
 impl State {
-    pub fn new() -> Self {
+    pub fn new(configuration: Configuration) -> Self {
         Self {
-            inner: Arc::new(Mutex::new(InnerState::new())),
+            inner: Arc::new(Mutex::new(InnerState::new(configuration))),
         }
     }
 
